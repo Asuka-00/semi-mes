@@ -1,14 +1,36 @@
-import { createApp } from 'vue'
-import { createPinia } from 'pinia'
-import './style.css'
-import App from './App.vue'
-import router from './router'
-import i18n from './locales'
+import { createApp } from 'vue';
+import './plugins/assets';
+import { setupVueRootValidator } from 'vite-plugin-vue-transition-root-validator/client';
+import { setupAppVersionNotification, setupDayjs, setupIconifyOffline, setupLoading, setupNProgress } from './plugins';
+import { setupStore } from './store';
+import { setupRouter } from './router';
+import { getLocale, setupI18n } from './locales';
+import App from './App.vue';
 
-const app = createApp(App)
+async function setupApp() {
+  setupLoading();
 
-app.use(createPinia())
-app.use(router)
-app.use(i18n)
+  setupNProgress();
 
-app.mount('#app')
+  setupIconifyOffline();
+
+  setupDayjs();
+
+  const app = createApp(App);
+
+  setupStore(app);
+
+  await setupRouter(app);
+
+  setupI18n(app);
+
+  setupAppVersionNotification();
+
+  setupVueRootValidator(app, {
+    lang: getLocale() === 'zh-CN' ? 'zh' : 'en'
+  });
+
+  app.mount('#app');
+}
+
+setupApp();
