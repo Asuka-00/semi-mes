@@ -1,0 +1,30 @@
+server:
+  port: 8080
+  mode: debug
+
+database:
+  type: sqlite
+  sqlite:
+    path: ./data/mes.db
+  mysql:
+    host: localhost
+    port: 3306
+    database: mes
+    username: root
+    password: password
+    charset: utf8mb4
+  postgres:
+    host: localhost
+    port: 5432
+    database: mes
+    username: postgres
+    password: password
+    sslmode: disable
+
+jwt:
+  secret: mes-jwt-secret-key-change-in-production
+  expire_hours: 24
+
+log:
+  level: debug
+  format: json
