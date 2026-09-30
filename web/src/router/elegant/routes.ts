@@ -40,6 +40,100 @@ export const generatedRoutes: GeneratedRoute[] = [
     }
   },
   {
+    name: 'base-data',
+    path: '/base-data',
+    component: 'layout.base',
+    meta: {
+      title: 'base-data',
+      i18nKey: 'route.base-data'
+    },
+    children: [
+      {
+        name: 'base-data_factory',
+        path: '/base-data/factory',
+        component: 'view.base-data_factory',
+        meta: {
+          title: 'base-data_factory',
+          i18nKey: 'route.base-data_factory'
+        }
+      },
+      {
+        name: 'base-data_line',
+        path: '/base-data/line',
+        component: 'view.base-data_line',
+        meta: {
+          title: 'base-data_line',
+          i18nKey: 'route.base-data_line'
+        }
+      },
+      {
+        name: 'base-data_operation',
+        path: '/base-data/operation',
+        component: 'view.base-data_operation',
+        meta: {
+          title: 'base-data_operation',
+          i18nKey: 'route.base-data_operation'
+        }
+      },
+      {
+        name: 'base-data_product',
+        path: '/base-data/product',
+        component: 'view.base-data_product',
+        meta: {
+          title: 'base-data_product',
+          i18nKey: 'route.base-data_product'
+        }
+      },
+      {
+        name: 'base-data_recipe',
+        path: '/base-data/recipe',
+        component: 'view.base-data_recipe',
+        meta: {
+          title: 'base-data_recipe',
+          i18nKey: 'route.base-data_recipe'
+        }
+      },
+      {
+        name: 'base-data_route',
+        path: '/base-data/route',
+        component: 'view.base-data_route',
+        meta: {
+          title: 'base-data_route',
+          i18nKey: 'route.base-data_route'
+        }
+      },
+      {
+        name: 'base-data_workshop',
+        path: '/base-data/workshop',
+        component: 'view.base-data_workshop',
+        meta: {
+          title: 'base-data_workshop',
+          i18nKey: 'route.base-data_workshop'
+        }
+      }
+    ]
+  },
+  {
+    name: 'equipment',
+    path: '/equipment',
+    component: 'layout.base',
+    meta: {
+      title: 'equipment',
+      i18nKey: 'route.equipment'
+    },
+    children: [
+      {
+        name: 'equipment_list',
+        path: '/equipment/list',
+        component: 'view.equipment_list',
+        meta: {
+          title: 'equipment_list',
+          i18nKey: 'route.equipment_list'
+        }
+      }
+    ]
+  },
+  {
     name: 'home',
     path: '/home',
     component: 'layout.base$view.home',
@@ -74,5 +168,123 @@ export const generatedRoutes: GeneratedRoute[] = [
       constant: true,
       hideInMenu: true
     }
+  },
+  {
+    name: 'lot',
+    path: '/lot',
+    component: 'layout.base',
+    meta: {
+      title: 'lot',
+      i18nKey: 'route.lot'
+    },
+    children: [
+      {
+        name: 'lot_list',
+        path: '/lot/list',
+        component: 'view.lot_list',
+        meta: {
+          title: 'lot_list',
+          i18nKey: 'route.lot_list'
+        }
+      }
+    ]
+  },
+  {
+    name: 'quality',
+    path: '/quality',
+    component: 'layout.base',
+    meta: {
+      title: 'quality',
+      i18nKey: 'route.quality'
+    },
+    children: [
+      {
+        name: 'quality_inspection',
+        path: '/quality/inspection',
+        component: 'view.quality_inspection',
+        meta: {
+          title: 'quality_inspection',
+          i18nKey: 'route.quality_inspection'
+        }
+      }
+    ]
+  },
+  {
+    name: 'system',
+    path: '/system',
+    component: 'layout.base',
+    meta: {
+      title: 'system',
+      i18nKey: 'route.system'
+    },
+    children: [
+      {
+        name: 'system_menu',
+        path: '/system/menu',
+        component: 'view.system_menu',
+        meta: {
+          title: 'system_menu',
+          i18nKey: 'route.system_menu'
+        }
+      },
+      {
+        name: 'system_role',
+        path: '/system/role',
+        component: 'view.system_role',
+        meta: {
+          title: 'system_role',
+          i18nKey: 'route.system_role'
+        }
+      },
+      {
+        name: 'system_user',
+        path: '/system/user',
+        component: 'view.system_user',
+        meta: {
+          title: 'system_user',
+          i18nKey: 'route.system_user'
+        }
+      }
+    ]
+  },
+  {
+    name: 'wip',
+    path: '/wip',
+    component: 'layout.base',
+    meta: {
+      title: 'wip',
+      i18nKey: 'route.wip'
+    },
+    children: [
+      {
+        name: 'wip_move',
+        path: '/wip/move',
+        component: 'view.wip_move',
+        meta: {
+          title: 'wip_move',
+          i18nKey: 'route.wip_move'
+        }
+      }
+    ]
+  },
+  {
+    name: 'work-order',
+    path: '/work-order',
+    component: 'layout.base',
+    meta: {
+      title: 'work-order',
+      i18nKey: 'route.work-order'
+    },
+    children: [
+      {
+        name: 'work-order_list',
+        path: '/work-order/list',
+        component: 'view.work-order_list',
+        meta: {
+          title: 'work-order_list',
+          i18nKey: 'route.work-order_list'
+        }
+      }
+    ]
   }
 ];

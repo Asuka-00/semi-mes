@@ -5,36 +5,25 @@
 ## 技术栈
 
 ### 后端
-- **框架**: Sponge (Go) + Gin + GORM
-- **数据库**: SQLite (开发环境) / MySQL / PostgreSQL (生产环境)
+- **框架**: [Sponge](https://github.com/go-dev-frame/sponge) v1.16.1 生成的 Web 服务（Gin + GORM）
+- **数据库**: SQLite。修改 `server/configs/mes.yml` 的 `database.driver` 可切换到 MySQL 或 PostgreSQL
 - **认证**: JWT
-- **授权**: RBAC (基于角色的访问控制)
+- **授权**: RBAC，按钮级权限码
 
 ### 前端
-- **框架**: Vue 3 + Vite + TypeScript
-- **UI库**: Naive UI
-- **状态管理**: Pinia
-- **路由**: Vue Router
-- **国际化**: vue-i18n (简体中文/英文)
+- **模板**: [Soybean Admin](https://github.com/soybeanjs/soybean-admin) 2.2.0
+- **框架**: Vue 3 + Vite + TypeScript + Naive UI + Pinia + UnoCSS
+- **路由**: elegant-router，后端动态路由
+- **国际化**: vue-i18n（zh-CN / en-US）
 
 ## 功能模块
 
 ### 已实现
-1. **系统管理**
-   - 用户管理
-   - 角色管理
-   - 菜单/权限管理
-   - JWT登录/登出
-   - RBAC权限控制
+1. **系统管理**：登录、用户、角色（分配菜单）、菜单，后端按权限码拦截接口
+2. **基础数据（模块1）**：工厂、车间、生产线、产品、工艺路线（含按顺序维护工序）、工序、配方。列表支持搜索和分页，按钮按权限显示
 
-2. **基础数据管理**（模块1）
-   - 工厂管理 ✅
-   - 车间管理
-   - 生产线管理
-   - 产品管理
-   - 工艺路线管理
-   - 工序管理
-   - 配方管理
+### 未实现
+模块 2–5 只有菜单和占位页，没有工单、批次、WIP、设备、质量的业务接口和页面。
 
 ### 待实现（已预留菜单和权限）
 3. **工单管理**（模块2）
@@ -60,42 +49,28 @@
 ## 快速开始
 
 ### 前置要求
-- Go 1.22+
-- Node.js 18+
-- npm 或 yarn
+- Go 1.24（SQLite 驱动需要 CGO 和 gcc）
+- Node.js 20+ 与 pnpm
 
 ### 后端启动
 
 ```bash
-# 进入后端目录
 cd server
-
-# 安装依赖
 go mod tidy
-
-# 运行（开发模式）
 make run
-
-# 或直接运行
-go run cmd/server/main.go
 ```
 
-后端默认运行在 `http://localhost:8080`
+服务监听 `http://localhost:8080`。SQLite 文件为 `server/data/mes.db`。`make build` 关闭了 CGO，不能用来编译当前的 SQLite 版本。
 
 ### 前端启动
 
 ```bash
-# 进入前端目录
 cd web
-
-# 安装依赖
-npm install
-
-# 运行（开发模式）
-npm run dev
+pnpm install
+pnpm dev
 ```
 
-前端默认运行在 `http://localhost:3000`
+`pnpm dev` 使用 test 模式，代理到 `http://localhost:8080/api/v1`。默认端口以终端输出为准（Soybean Admin 通常是 9527）。
 
 ### 使用 Makefile 一键启动
 
@@ -113,10 +88,7 @@ make run-web     # 启动前端
 - 用户名: `admin`
 - 密码: `admin123`
 
-登录后可以：
-- 切换中英文界面
-- 管理用户、角色、菜单
-- 管理基础数据（工厂、车间、生产线、产品、工艺路线、工序、配方）
+登录后可以切换中英文，菜单由后端返回。可以维护用户、角色、菜单和全部基础数据。工艺路线页面可以按顺序维护工序。
 
 ## 项目结构
 

@@ -6,55 +6,49 @@
 
 ### 1.1 技术栈
 
-- **前端 (Frontend)**: Soybean Admin (Vue 3 + Vite + TypeScript + Naive UI)
-- **后端 (Backend)**: Sponge (Go framework) + Gin + GORM
-- **数据库 (Database)**: SQLite (开发环境) / MySQL / PostgreSQL (生产环境，可配置切换)
-- **认证 (Authentication)**: JWT
-- **授权 (Authorization)**: RBAC (Role-Based Access Control)
-- **国际化 (i18n)**: 简体中文 (zh-CN) + 英文 (en-US)
+- **前端 (Frontend)**: Soybean Admin 2.2.0（`github.com/soybeanjs/soybean-admin`）。保留其布局、主题、vue-i18n、elegant-router 与权限约定。`VITE_AUTH_ROUTE_MODE=dynamic`，菜单来自 `GET /api/v1/route/getUserRoutes`。按钮权限使用 `useAuth().hasAuth`，数据来自 `userInfo.buttons`。
+- **后端 (Backend)**: Sponge v1.16.1（`github.com/go-dev-frame/sponge`）生成的 web 服务。入口 `server/cmd/mes`，按 model / dao / handler / routers 分层。基础表的 CRUD 由 `sponge web http` 生成，再补认证、RBAC、种子数据和双语错误信息。
+- **数据库 (Database)**: 默认 SQLite。只改 `server/configs/mes.yml` 的 `database.driver`（`sqlite` | `mysql` | `postgresql`）即可切换，业务代码不写数据库方言 SQL。
+- **认证 (Authentication)**: Sponge JWT（`Authorization: Bearer`）。登录体字段为 Soybean 的 `userName`。
+- **授权 (Authorization)**: RBAC。`super_admin` 跳过权限校验，其余角色按菜单上的权限码校验。
+- **国际化 (i18n)**: 前端 zh-CN / en-US。请求带 `Accept-Language`，后端错误文案按该头返回中文或英文。
 
 ### 1.2 架构原则
 
-- **前后端分离**: 前端通过RESTful API与后端通信
-- **数据库无关**: 使用GORM抽象层，支持配置切换数据库
-- **权限驱动**: 所有API和前端功能基于RBAC权限控制
-- **国际化优先**: 所有用户可见文本支持双语切换
+- **前后端分离**: 前端通过 HTTP JSON 与后端通信，响应为 `{code, msg, data}`，成功码为 `0`。
+- **数据库无关**: GORM AutoMigrate + 生成代码，不写某一种数据库专用 SQL。
+- **权限驱动**: 动态路由决定菜单，按钮权限码决定新增、编辑、删除是否显示；后端对同一权限码再校验一次。
+- **国际化优先**: 页面文案走 Soybean 的 locale；接口失败提示走后端 `msg`。
+
+状态字段在界面上使用 `1` 启用、`2` 停用。Sponge 生成的 DAO 更新会跳过数值 0，因此不用 `0` 表示停用。
 
 ## 2. 仓库结构 (Repository Layout)
 
 ```
 semi-mes/
-├── docs/                   # 文档目录
-│   └── design.md          # 本设计文档
-├── server/                # 后端代码
-│   ├── cmd/               # 应用入口
-│   ├── internal/          # 内部代码
-│   │   ├── config/       # 配置管理
-│   │   ├── model/        # 数据模型
-│   │   ├── dao/          # 数据访问层
-│   │   ├── service/      # 业务逻辑层
-│   │   ├── handler/      # HTTP处理器
-│   │   ├── middleware/   # 中间件（JWT、RBAC等）
-│   │   └── router/       # 路由定义
-│   ├── migrations/        # 数据库迁移
-│   ├── config/            # 配置文件
-│   ├── go.mod
-│   └── Makefile
-├── web/                   # 前端代码
-│   ├── src/
-│   │   ├── api/          # API调用封装
-│   │   ├── views/        # 页面组件
-│   │   ├── router/       # 路由配置
-│   │   ├── stores/       # 状态管理
-│   │   ├── locales/      # 国际化文件
-│   │   └── typings/      # TypeScript类型定义
-│   ├── package.json
-│   └── vite.config.ts
-├── scripts/               # 运行脚本
-│   ├── run-dev.sh        # 开发环境启动脚本
-│   └── run-prod.sh       # 生产环境启动脚本
-├── Makefile              # 统一构建脚本
-└── README.md             # 项目说明
+├── docs/design.md
+├── server/                         # Sponge 生成的服务
+│   ├── cmd/mes/                    # 进程入口
+│   ├── configs/mes.yml             # 数据库、JWT、HTTP
+│   ├── internal/
+│   │   ├── model/                  # GORM 模型
+│   │   ├── dao/                    # 数据访问
+│   │   ├── handler/                # HTTP handler（含 auth）
+│   │   ├── routers/                # 路由注册
+│   │   ├── bootstrap/              # AutoMigrate 与种子数据
+│   │   ├── rbac/                   # 按路径映射权限码
+│   │   ├── i18n/
+│   │   ├── database/               # sqlite / mysql / postgresql
+│   │   └── config/
+│   └── scripts/schema.sql          # 供 sponge CLI 读取的表结构
+├── web/                            # Soybean Admin 2.2.0
+│   ├── src/views/                  # 页面，文件路径即路由名
+│   ├── src/service/api/            # 请求封装
+│   ├── src/locales/langs/          # zh-cn.ts / en-us.ts
+│   ├── src/router/elegant/         # elegant-router 生成物
+│   └── .env / .env.test            # dynamic 路由与后端地址
+├── Makefile
+└── README.md
 ```
 
 ## 3. 数据模型设计 (Data Model)
@@ -391,7 +385,7 @@ semi-mes/
 
 - **基础路径**: `/api/v1`
 - **认证**: 使用 `Authorization: Bearer <token>` Header
-- **命名规则**: 使用小写字母和连字符，如 `/api/v1/base-data/factories`
+- **命名规则**: 与 Sponge 生成代码一致，资源名为驼峰，例如 `/api/v1/baseFactory`。创建为 `POST /资源`，更新 `PUT /资源/:id`，删除 `DELETE /资源/:id`，详情 `GET /资源/:id`，分页列表为 `POST /资源/list`。
 
 ### 4.2 统一响应格式
 
@@ -399,7 +393,7 @@ semi-mes/
 ```json
 {
   "code": 0,
-  "message": "success",
+  "msg": "ok",
   "data": {
     // 业务数据
   }
@@ -410,8 +404,8 @@ semi-mes/
 ```json
 {
   "code": 40001,
-  "message": "error.auth.invalid_token",
-  "data": null
+  "msg": "用户名或密码错误",
+  "data": {}
 }
 ```
 
@@ -419,12 +413,10 @@ semi-mes/
 ```json
 {
   "code": 0,
-  "message": "success",
+  "msg": "ok",
   "data": {
-    "list": [...],
-    "total": 100,
-    "page": 1,
-    "page_size": 20
+    "baseFactorys": [],
+    "total": 100
   }
 }
 ```
@@ -442,53 +434,32 @@ semi-mes/
 
 ### 4.4 主要API端点
 
-#### 4.4.1 系统管理
-- `POST /api/v1/auth/login` - 登录
-- `POST /api/v1/auth/logout` - 登出
-- `GET /api/v1/auth/user-info` - 获取当前用户信息
-- `GET /api/v1/auth/menus` - 获取当前用户菜单权限
-- `GET /api/v1/users` - 用户列表
-- `POST /api/v1/users` - 创建用户
-- `PUT /api/v1/users/:id` - 更新用户
-- `DELETE /api/v1/users/:id` - 删除用户
-- `GET /api/v1/roles` - 角色列表
-- `POST /api/v1/roles` - 创建角色
-- `PUT /api/v1/roles/:id` - 更新角色
-- `DELETE /api/v1/roles/:id` - 删除角色
-- `GET /api/v1/menus` - 菜单列表（树形）
-- `POST /api/v1/menus` - 创建菜单
-- `PUT /api/v1/menus/:id` - 更新菜单
-- `DELETE /api/v1/menus/:id` - 删除菜单
+列表请求体为 `{ "page": 0, "limit": 10, "columns": [{ "name": "factory_name", "exp": "like", "value": "%Fab%", "logic": "and" }] }`。`page` 从 0 开始。列表字段名是生成代码的复数形式，例如 `baseFactorys`、`baseWorkshops`、`baseProductionLines`、`baseProducts`、`baseProcessRoutes`、`baseOperations`、`baseRecipes`、`sysUsers`、`sysRoles`、`sysMenus`。JSON 字段为驼峰，外键以 `ID` 结尾，如 `factoryID`。
 
-#### 4.4.2 基础数据（模块1）
-- `GET /api/v1/base-data/factories` - 工厂列表
-- `POST /api/v1/base-data/factories` - 创建工厂
-- `PUT /api/v1/base-data/factories/:id` - 更新工厂
-- `DELETE /api/v1/base-data/factories/:id` - 删除工厂
-- `GET /api/v1/base-data/workshops` - 车间列表
-- `POST /api/v1/base-data/workshops` - 创建车间
-- `PUT /api/v1/base-data/workshops/:id` - 更新车间
-- `DELETE /api/v1/base-data/workshops/:id` - 删除车间
-- `GET /api/v1/base-data/production-lines` - 生产线列表
-- `POST /api/v1/base-data/production-lines` - 创建生产线
-- `PUT /api/v1/base-data/production-lines/:id` - 更新生产线
-- `DELETE /api/v1/base-data/production-lines/:id` - 删除生产线
-- `GET /api/v1/base-data/products` - 产品列表
-- `POST /api/v1/base-data/products` - 创建产品
-- `PUT /api/v1/base-data/products/:id` - 更新产品
-- `DELETE /api/v1/base-data/products/:id` - 删除产品
-- `GET /api/v1/base-data/process-routes` - 工艺路线列表
-- `POST /api/v1/base-data/process-routes` - 创建工艺路线
-- `PUT /api/v1/base-data/process-routes/:id` - 更新工艺路线
-- `DELETE /api/v1/base-data/process-routes/:id` - 删除工艺路线
-- `GET /api/v1/base-data/operations` - 工序列表
-- `POST /api/v1/base-data/operations` - 创建工序
-- `PUT /api/v1/base-data/operations/:id` - 更新工序
-- `DELETE /api/v1/base-data/operations/:id` - 删除工序
-- `GET /api/v1/base-data/recipes` - 配方列表
-- `POST /api/v1/base-data/recipes` - 创建配方
-- `PUT /api/v1/base-data/recipes/:id` - 更新配方
-- `DELETE /api/v1/base-data/recipes/:id` - 删除配方
+#### 4.4.1 认证与动态路由
+- `POST /api/v1/auth/login` 请求 `{userName, password}`，返回 `{token, refreshToken}`
+- `POST /api/v1/auth/refreshToken`
+- `GET /api/v1/auth/getUserInfo` 返回 `{userId, userName, roles, buttons}`
+- `GET /api/v1/route/getConstantRoutes` 登录前可访问
+- `GET /api/v1/route/getUserRoutes` 返回 `{routes, home}`，`routes` 为 elegant-router 路由树
+- `GET /api/v1/route/isRouteExist`
+
+#### 4.4.2 系统管理
+每个资源都有创建、按 id 查询、更新、删除，以及 `POST /list`：
+- `/api/v1/sysUser`，另有 `GET|PUT /api/v1/sysUser/:id/roles`，体为 `{roleIds}`
+- `/api/v1/sysRole`，另有 `GET|PUT /api/v1/sysRole/:id/menus`，体为 `{menuIds}`
+- `/api/v1/sysMenu`
+- `/api/v1/sysUserRole`、`/api/v1/sysRoleMenu` 为关联表的生成接口，页面优先使用上面的 roles/menus 接口
+
+#### 4.4.3 基础数据（模块1）
+同样是创建、查询、更新、删除和 `POST /list`：
+- `/api/v1/baseFactory`
+- `/api/v1/baseWorkshop`
+- `/api/v1/baseProductionLine`
+- `/api/v1/baseProduct`
+- `/api/v1/baseProcessRoute`
+- `/api/v1/baseOperation`（`routeID` + `sequence`，工艺路线页面按顺序维护）
+- `/api/v1/baseRecipe`
 
 ## 5. 国际化方案 (i18n Approach)
 
@@ -538,55 +509,27 @@ export default {
 
 ### 5.2 后端国际化
 
-后端错误消息和枚举值返回i18n key，由前端根据当前语言渲染：
-
-```go
-// 后端返回错误消息的key
-{
-  "code": 40009,
-  "message": "error.validation.required_field",
-  "data": {
-    "field": "factory_code"
-  }
-}
-```
-
-前端根据message key和当前语言显示对应文本。
+后端读取 `Accept-Language`。包含 `en` 时 `msg` 为英文，否则为简体中文。Soybean 直接展示 `msg`。
 
 ### 5.3 菜单国际化
 
-菜单名称在数据库中存储i18n key（如 `menu.baseData.factory`），前端根据key渲染对应语言文本。
+菜单的 `meta.i18nKey` 为 `route.<路由名>`，例如 `route.base-data_factory`。文案在 `web/src/locales/langs/zh-cn.ts` 与 `en-us.ts` 的 `route` 中。
 
 ## 6. 数据库切换方案 (Database Switching)
 
 ### 6.1 配置文件
 
+实际文件是 `server/configs/mes.yml`。只改 `database.driver`：
+
 ```yaml
-# config/config.yaml
 database:
-  type: sqlite  # 可选: sqlite, mysql, postgres
-  
-  # SQLite配置
+  driver: sqlite   # sqlite | mysql | postgresql
   sqlite:
-    path: ./data/mes.db
-  
-  # MySQL配置
+    dbFile: data/mes.db
   mysql:
-    host: localhost
-    port: 3306
-    database: mes
-    username: root
-    password: password
-    charset: utf8mb4
-  
-  # PostgreSQL配置
-  postgres:
-    host: localhost
-    port: 5432
-    database: mes
-    username: postgres
-    password: password
-    sslmode: disable
+    dsn: "root:password@(127.0.0.1:3306)/mes?parseTime=true&loc=Local&charset=utf8mb4&collation=utf8mb4_general_ci"
+  postgresql:
+    dsn: "postgres:password@127.0.0.1:5432/mes?sslmode=disable"
 ```
 
 ### 6.2 数据库连接代码
@@ -674,35 +617,23 @@ router.POST("/api/v1/base-data/factories",
 ### 7.3 前端权限控制
 
 - 菜单：通过后端接口获取当前用户可访问的菜单树，动态生成路由
-- 按钮：使用指令或组件检查权限码，控制按钮显隐
-
-```vue
-<script setup lang="ts">
-import { usePermission } from '@/hooks/use-permission'
-
-const { hasPermission } = usePermission()
-</script>
-
-<template>
-  <n-button v-if="hasPermission('base:factory:add')" @click="handleAdd">
-    {{ $t('common.add') }}
-  </n-button>
-</template>
-```
+- 按钮：Soybean 的 `useAuth().hasAuth('base:factory:add')`，权限码来自 `getUserInfo` 的 `buttons`。
 
 ## 8. 开发和部署
 
 ### 8.1 开发环境
 
 ```bash
-# 启动后端
-cd server
+# 后端需要 CGO（sqlite）。Go 1.24。在 server 目录：
 make run
 
-# 启动前端
+# 前端是 pnpm workspace。开发脚本使用 test 模式，读取 web/.env.test
 cd web
-npm run dev
+pnpm install
+pnpm dev
 ```
+
+`server` 的 `make build` 使用 `CGO_ENABLED=0`，不能链接 SQLite。本地 SQLite 用 `make run`。
 
 ### 8.2 生产环境
 
@@ -806,13 +737,12 @@ WIP跟踪 (wip) - 待实现
 
 ### 10.1 后端技术要点
 
-1. **使用Sponge框架生成代码骨架**：基于protobuf定义生成model、dao、service、handler代码
-2. **JWT认证**：使用`golang-jwt/jwt`库实现token生成和验证
-3. **GORM**：ORM框架，支持多数据库
-4. **Gin**：Web框架，提供路由、中间件等功能
-5. **配置管理**：使用`viper`读取YAML配置
-6. **日志**：使用`zap`结构化日志
-7. **参数验证**：使用`validator`验证请求参数
+1. **Sponge CLI**：`sponge web http` 按表生成 model、dao、handler、router。表结构来源是 `server/scripts/schema.sql`。
+2. **JWT**：使用 Sponge 的 `pkg/jwt` 与 `middleware.Auth`。
+3. **GORM**：通过 `database.driver` 切换 sqlite、mysql、postgresql。
+4. **Gin**：Sponge 的 HTTP 层。
+5. **配置**：`configs/mes.yml`。
+6. **种子数据**：首次启动 AutoMigrate，并写入管理员、角色和菜单。默认账号 `admin` / `admin123`。
 
 ### 10.2 前端技术要点
 
@@ -863,7 +793,7 @@ WIP跟踪 (wip) - 待实现
 
 ## 12. 参考资料
 
-- [Sponge文档](https://github.com/zhufuyi/sponge)
+- [Sponge文档](https://github.com/go-dev-frame/sponge)
 - [Soybean Admin文档](https://github.com/soybeanjs/soybean-admin)
 - [GORM文档](https://gorm.io/)
 - [Gin文档](https://gin-gonic.com/)

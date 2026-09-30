@@ -20,9 +20,31 @@ declare module "@elegant-router/types" {
     "403": "/403";
     "404": "/404";
     "500": "/500";
+    "base-data": "/base-data";
+    "base-data_factory": "/base-data/factory";
+    "base-data_line": "/base-data/line";
+    "base-data_operation": "/base-data/operation";
+    "base-data_product": "/base-data/product";
+    "base-data_recipe": "/base-data/recipe";
+    "base-data_route": "/base-data/route";
+    "base-data_workshop": "/base-data/workshop";
+    "equipment": "/equipment";
+    "equipment_list": "/equipment/list";
     "home": "/home";
     "iframe-page": "/iframe-page/:url";
     "login": "/login/:module(pwd-login|code-login|register|reset-pwd|bind-wechat)?";
+    "lot": "/lot";
+    "lot_list": "/lot/list";
+    "quality": "/quality";
+    "quality_inspection": "/quality/inspection";
+    "system": "/system";
+    "system_menu": "/system/menu";
+    "system_role": "/system/role";
+    "system_user": "/system/user";
+    "wip": "/wip";
+    "wip_move": "/wip/move";
+    "work-order": "/work-order";
+    "work-order_list": "/work-order/list";
   };
 
   /**
@@ -57,9 +79,16 @@ declare module "@elegant-router/types" {
     | "403"
     | "404"
     | "500"
+    | "base-data"
+    | "equipment"
     | "home"
     | "iframe-page"
     | "login"
+    | "lot"
+    | "quality"
+    | "system"
+    | "wip"
+    | "work-order"
   >;
 
   /**
@@ -81,7 +110,22 @@ declare module "@elegant-router/types" {
     | "500"
     | "iframe-page"
     | "login"
+    | "base-data_factory"
+    | "base-data_line"
+    | "base-data_operation"
+    | "base-data_product"
+    | "base-data_recipe"
+    | "base-data_route"
+    | "base-data_workshop"
+    | "equipment_list"
     | "home"
+    | "lot_list"
+    | "quality_inspection"
+    | "system_menu"
+    | "system_role"
+    | "system_user"
+    | "wip_move"
+    | "work-order_list"
   >;
 
   /**

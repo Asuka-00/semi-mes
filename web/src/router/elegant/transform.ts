@@ -166,9 +166,31 @@ const routeMap: RouteMap = {
   "403": "/403",
   "404": "/404",
   "500": "/500",
+  "base-data": "/base-data",
+  "base-data_factory": "/base-data/factory",
+  "base-data_line": "/base-data/line",
+  "base-data_operation": "/base-data/operation",
+  "base-data_product": "/base-data/product",
+  "base-data_recipe": "/base-data/recipe",
+  "base-data_route": "/base-data/route",
+  "base-data_workshop": "/base-data/workshop",
+  "equipment": "/equipment",
+  "equipment_list": "/equipment/list",
   "home": "/home",
   "iframe-page": "/iframe-page/:url",
-  "login": "/login/:module(pwd-login|code-login|register|reset-pwd|bind-wechat)?"
+  "login": "/login/:module(pwd-login|code-login|register|reset-pwd|bind-wechat)?",
+  "lot": "/lot",
+  "lot_list": "/lot/list",
+  "quality": "/quality",
+  "quality_inspection": "/quality/inspection",
+  "system": "/system",
+  "system_menu": "/system/menu",
+  "system_role": "/system/role",
+  "system_user": "/system/user",
+  "wip": "/wip",
+  "wip_move": "/wip/move",
+  "work-order": "/work-order",
+  "work-order_list": "/work-order/list"
 };
 
 /**
