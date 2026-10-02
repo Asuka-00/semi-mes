@@ -1,7 +1,11 @@
 package bootstrap
 
 import (
+	"fmt"
+
+	"semi-mes/server/internal/dao"
 	"semi-mes/server/internal/model"
+	"semi-mes/server/internal/routegraph"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -35,6 +39,9 @@ func Seed(db *gorm.DB) error {
 		&model.BaseProcessRoute{},
 		&model.BaseOperation{},
 		&model.BaseRecipe{},
+		&model.BaseRouteVersion{},
+		&model.BaseRouteNode{},
+		&model.BaseRouteEdge{},
 	); err != nil {
 		return err
 	}
@@ -44,7 +51,7 @@ func Seed(db *gorm.DB) error {
 		return err
 	}
 	if count > 0 {
-		return nil
+		return seedSampleRoute(db)
 	}
 
 	roles := []model.SysRole{
@@ -90,21 +97,83 @@ func Seed(db *gorm.DB) error {
 			roleMenus = append(roleMenus, model.SysRoleMenu{RoleID: 2, MenuID: int(menu.ID)})
 		}
 	}
-	return db.Create(&roleMenus).Error
+	if err = db.Create(&roleMenus).Error; err != nil {
+		return err
+	}
+	return seedSampleRoute(db)
+}
+
+func seedSampleRoute(db *gorm.DB) error {
+	var count int64
+	if err := db.Model(&model.BaseRouteVersion{}).Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	product := model.BaseProduct{ProductCode: "CMOS-DEMO", ProductName: "CMOS Demo", ProductType: "IC", Version: "A", Status: 1}
+	if err := db.Where(model.BaseProduct{ProductCode: "CMOS-DEMO"}).FirstOrCreate(&product).Error; err != nil {
+		return err
+	}
+	ops := []model.BaseOperation{
+		{OperationCode: "CLEAN", OperationName: "清洗 Clean", OperationType: "WET", Status: 1},
+		{OperationCode: "PHOTO", OperationName: "光刻 Photo", OperationType: "PHOTO", Status: 1},
+		{OperationCode: "INSPECT", OperationName: "检测 Inspect", OperationType: "METRO", Status: 1},
+		{OperationCode: "ETCH", OperationName: "刻蚀 Etch", OperationType: "ETCH", Status: 1},
+		{OperationCode: "ENG_REVIEW", OperationName: "工程评审 Eng Review", OperationType: "ENG", Status: 1},
+	}
+	ids := map[string]uint64{}
+	for _, op := range ops {
+		row := op
+		if err := db.Where(model.BaseOperation{OperationCode: op.OperationCode}).FirstOrCreate(&row).Error; err != nil {
+			return err
+		}
+		ids[op.OperationCode] = row.ID
+	}
+	route := model.BaseProcessRoute{
+		ProductID: int(product.ID), RouteCode: "ROUTE-CMOS", RouteName: "CMOS 主流程", Version: "1",
+		IsDefault: 1, Description: "检测后按结果返工或进入工程分支", Status: 1,
+	}
+	if err := db.Where(model.BaseProcessRoute{RouteCode: "ROUTE-CMOS"}).FirstOrCreate(&route).Error; err != nil {
+		return err
+	}
+	ver := model.BaseRouteVersion{RouteID: route.ID, VersionNo: 1, State: routegraph.StateDraft, Note: "示例：光刻返工与工程分支"}
+	if err := db.Create(&ver).Error; err != nil {
+		return err
+	}
+	if err := dao.SaveRouteGraph(db, route.ID, ver.ID, routegraph.Sample(ids)); err != nil {
+		return err
+	}
+	_, issues, err := dao.ReleaseRouteVersion(db, route.ID, ver.ID)
+	if err != nil {
+		return err
+	}
+	if len(issues) > 0 {
+		return fmt.Errorf("sample route invalid: %s", issues[0].Code)
+	}
+	return nil
+}
+
+func isBaseMenu(menu model.SysMenu) bool {
+	if menu.RouteName == "home" || menu.RouteName == "base-data" || hasPrefix(menu.RouteName, "base-data_") {
+		return true
+	}
+	// Button rows keep an empty route name and carry the permission code only.
+	return hasPrefix(menu.PermissionCode, "base:")
 }
 
 func isViewerMenu(menu model.SysMenu) bool {
-	if menu.RouteName == "home" || menu.RouteName == "base-data" || hasPrefix(menu.RouteName, "base-data_") {
-		return menu.MenuType != 3 || hasSuffix(menu.PermissionCode, ":query")
+	if !isBaseMenu(menu) {
+		return false
 	}
-	return false
+	return menu.MenuType != 3 || hasSuffix(menu.PermissionCode, ":query")
 }
 
 func isOperatorMenu(menu model.SysMenu) bool {
-	if menu.RouteName == "home" || menu.RouteName == "base-data" || hasPrefix(menu.RouteName, "base-data_") {
-		return menu.MenuType != 3 || !hasSuffix(menu.PermissionCode, ":delete")
+	if !isBaseMenu(menu) {
+		return false
 	}
-	return false
+	return menu.MenuType != 3 || !hasSuffix(menu.PermissionCode, ":delete")
 }
 
 func isSysAdminMenu(menu model.SysMenu) bool {

@@ -17,6 +17,9 @@ var zhCN = map[string]string{
 	"error.user.username_exists":        "用户名已存在",
 	"error.role.code_exists":            "角色编码已存在",
 	"error.menu.has_children":           "请先删除子菜单",
+	"error.route.not_found":             "工艺路线版本不存在",
+	"error.route.not_draft":             "已发布或作废的版本不能修改",
+	"error.route.no_path":               "当前节点没有可用的下一步",
 }
 
 var enUS = map[string]string{
@@ -30,6 +33,9 @@ var enUS = map[string]string{
 	"error.user.username_exists":        "Username already exists",
 	"error.role.code_exists":            "Role code already exists",
 	"error.menu.has_children":           "Delete child menus first",
+	"error.route.not_found":             "Route version not found",
+	"error.route.not_draft":             "Released or obsolete versions cannot be edited",
+	"error.route.no_path":               "Current node has no next step",
 }
 
 // T returns a message for the request language. Default is zh-CN.

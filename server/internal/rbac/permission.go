@@ -77,6 +77,16 @@ func permissionCode(method, fullPath string) string {
 				}
 				return item.perm + ":edit"
 			}
+			switch {
+			case strings.HasSuffix(fullPath, "/resolve"), strings.HasSuffix(fullPath, "/validate"):
+				return item.perm + ":query"
+			case strings.HasSuffix(fullPath, "/release"), strings.HasSuffix(fullPath, "/graph"):
+				return item.perm + ":edit"
+			case strings.HasSuffix(fullPath, "/versions") && method == http.MethodPost:
+				return item.perm + ":add"
+			case strings.Contains(fullPath, "/versions"):
+				return item.perm + ":query"
+			}
 			if strings.HasSuffix(fullPath, "/list") || method == http.MethodGet {
 				return item.perm + ":query"
 			}

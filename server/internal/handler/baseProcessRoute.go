@@ -28,6 +28,13 @@ type BaseProcessRouteHandler interface {
 	UpdateByID(c *gin.Context)
 	GetByID(c *gin.Context)
 	List(c *gin.Context)
+	ListVersions(c *gin.Context)
+	CreateVersion(c *gin.Context)
+	GetVersion(c *gin.Context)
+	SaveGraph(c *gin.Context)
+	ValidateVersion(c *gin.Context)
+	ReleaseVersion(c *gin.Context)
+	ResolveNext(c *gin.Context)
 }
 
 type baseProcessRouteHandler struct {
