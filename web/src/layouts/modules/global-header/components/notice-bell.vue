@@ -62,7 +62,7 @@ onUnmounted(() => {
   <NPopover trigger="click" placement="bottom-end" :width="380" @update:show="show => show && load()">
     <template #trigger>
       <NBadge :value="unread" :max="99" :show="unread > 0">
-        <ButtonIcon icon="mdi:bell-outline" :tooltip-content="$t('notice.title')" />
+        <ButtonIcon icon="mdi:bell-outline" />
       </NBadge>
     </template>
     <div class="max-h-420px overflow-y-auto">
