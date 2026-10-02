@@ -189,7 +189,7 @@ semi-mes/
 | product_id | bigint | 产品ID |
 | route_code | varchar(50) | 路线编码 |
 | route_name | varchar(100) | 路线名称 |
-| version | varchar(20) | 版本号 |
+| version | varchar(20) | 当前已发布版本号，发布时回写，页面不单独编辑 |
 | is_default | tinyint | 是否默认路线：1-是，0-否 |
 | description | varchar(500) | 描述 |
 | status | tinyint | 状态：1-启用，0-禁用 |
@@ -202,11 +202,11 @@ semi-mes/
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
 | id | bigint | 主键ID |
-| route_id | bigint | 所属工艺路线ID |
+| route_id | bigint | 遗留列，可空。工序是主数据，不再按路线排序 |
 | operation_code | varchar(50) | 工序编码 |
 | operation_name | varchar(100) | 工序名称 |
 | operation_type | varchar(50) | 工序类型：PHOTO, ETCH, DEPOSITION, etc. |
-| sequence | int | 工序顺序 |
+| sequence | int | 遗留列。路线顺序改由流程图的边表达 |
 | standard_time | int | 标准工时（分钟） |
 | description | varchar(500) | 描述 |
 | status | tinyint | 状态：1-启用，0-禁用 |
@@ -231,7 +231,81 @@ semi-mes/
 | updated_at | timestamp | 更新时间 |
 | deleted_at | timestamp | 软删除时间 |
 
+#### 3.2.8 工艺路线流程图
+
+路线头 `base_process_route` 只描述编码、名称和所属产品。可执行的流程是带版本的有向图，不再使用工序上的 `sequence` 排序。
+
+不设置并行分叉和汇合节点。一个 Lot 是一份物理在制，同一时刻只占据一个节点。需要两段工艺同时进行时，在模块 2 拆批，而不是让同一个 Lot 走两条边。条件分支用判定节点表达。
+
+```mermaid
+flowchart LR
+  S([开始]) --> C[清洗]
+  C --> P[光刻]
+  P --> I[检测]
+  I --> D{判定}
+  D -->|默认 else| E[刻蚀]
+  E --> End1([结束])
+  D -->|inspection.result = fail 返工 最多 2 次| P
+  D -->|lot.type = engineering| R[工程评审]
+  R --> End2([结束])
+```
+
+种子数据 `ROUTE-CMOS` 就是上图，版本 1 以已发布状态写入。失败返工回到光刻，超过 2 次则 Hold，不继续走该边。
+
+##### 表
+
+`base_route_version`：`route_id`、`version_no`、`state`（`draft` / `released` / `obsolete`）、`note`。同一路线同时只有一个 `released`。发布时把原先的 `released` 改为 `obsolete`。已发布和已作废的版本拒绝修改；要改就复制成新的草稿。Lot 绑定具体的 `version_id`，不随路线头飘移。
+
+`base_route_node`：`node_key`、`node_type`（`start` / `end` / `operation` / `decision`）、`name`、`operation_id`、`recipe_id`、`equipment_group`、`pos_x`、`pos_y`。工序节点引用工序主数据。
+
+`base_route_edge`：`edge_key`、`from_key`、`to_key`、`edge_kind`（`normal` / `rework`）、`is_default`、`priority`、`condition_json`、`max_rework`、`on_exceed`、`label`。返工边在图上用虚线区分。`on_exceed` 目前只有 `hold`。
+
+这三张新表使用 GORM 的 `DeletedAt` 做软删除。Sponge 生成的旧模型仍是 `*time.Time`，删除仍是物理删除：改成 `gorm.DeletedAt` 会让生成的 sqlmock 用例按字段展开参数而失败，没有和流程图一起改。
+
+##### 条件
+
+条件是声明式 JSON，不执行代码。非默认边必须带条件，默认边必须为空，这样 Lot 在没有命中任何条件时仍有一条 else 可走。
+
+```json
+{"all":[{"field":"inspection.result","op":"eq","value":"fail"}]}
+```
+
+`all` 与 `any` 只能出现一个。字段白名单：
+
+| 字段 | 类型 | 含义 |
+|------|------|------|
+| inspection.result | string | 出站检验，如 pass / fail |
+| inspection.grade | string | 等级 |
+| defect.code | string | 缺陷代码 |
+| lot.productCode | string | 产品编码 |
+| lot.priority | number | 优先级 |
+| lot.type | string | production 或 engineering |
+| rework.count | number | 这条返工边已经被走过的次数 |
+
+比较符：字符串用 `eq` `ne` `in` `contains`；数字再用 `gt` `gte` `lt` `lte`。`in` 的值是数组。
+
+##### 下一步
+
+`routegraph.Resolve(graph, currentNodeKey, context)` 给后续 WIP 用。出边按 `priority` 从小到大检查，默认边最后。第一条命中的非默认边生效，否则走默认边。若选中的是返工边且 `rework.count >= max_rework`，结果是 `hold`，不跳转。当前节点已是结束时，结果是 `end`。`action` 为 `move`、`hold` 或 `end`，`reason` 为 `matched`、`default`、`rework_exceeded` 或 `already_end`。
+
+##### 发布前校验
+
+- 恰好一个开始节点，至少一个结束节点
+- 开始没有入边，结束没有出边
+- 从开始沿所有边能到达每个节点，每个非结束节点能到达某个结束
+- 出边不少于两条时恰好一条默认边；只有一条出边时该边必须是默认边
+- 判定节点至少两条出边
+- 返工边的目标必须是上游（只沿普通边，目标能到达源），或回到自身；`max_rework >= 1`
+- 去掉已设上限的返工边之后，剩余图必须是有向无环图
+- 条件字段、比较符、取值类型都在白名单内；工序节点必须选择工序
+
+##### 编辑器
+
+前端使用 Vue Flow（`@vue-flow/core` 及 background、controls、minimap）和 `@dagrejs/dagre`。Vue Flow 是 Vue 3 组合式 API 的图编辑库，缩放、平移和自定义节点是内建的，比不以 Vue 为主的 AntV X6、LogicFlow 更贴 Soybean Admin。页面支持拖拽和按钮添加节点、连线、侧栏编辑工序/配方/设备组和边条件、自动布局、校验、保存草稿、发布，以及只读查看已发布版本。中英文和 `base:route` 的查询、新增、编辑权限一起生效。
+
 ### 3.3 模块2：工单和批次管理 (Work Order & Lot Management)
+
+模块 2 落地时，批次绑定 `route_version_id` 和 `current_node_key`，位置不再用 `current_operation_id`。下一步调用 3.2.8 的 Resolve。下面的表是实现前的草稿，工单与 Lot 的实现会改写本节。
 
 #### 3.3.1 工单表 (wip_work_order)
 
@@ -458,7 +532,12 @@ semi-mes/
 - `/api/v1/baseProductionLine`
 - `/api/v1/baseProduct`
 - `/api/v1/baseProcessRoute`
-- `/api/v1/baseOperation`（`routeID` + `sequence`，工艺路线页面按顺序维护）
+- `/api/v1/baseOperation`（工序主数据，不要求隶属某条路线）
+- `/api/v1/baseProcessRoute/:id/versions` 列出版本、创建草稿（可 `copyFrom`）
+- `/api/v1/baseProcessRoute/:id/versions/:versionId` 读取流程图
+- `PUT .../graph` 整体替换草稿的节点和边
+- `POST .../validate`、`POST .../release`
+- `POST .../resolve` 给定当前节点和批次上下文，返回下一步
 - `/api/v1/baseRecipe`
 
 ## 5. 国际化方案 (i18n Approach)

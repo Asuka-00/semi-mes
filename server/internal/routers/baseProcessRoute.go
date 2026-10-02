@@ -28,4 +28,11 @@ func baseProcessRouteRouter(group *gin.RouterGroup, h handler.BaseProcessRouteHa
 	g.PUT("/:id", h.UpdateByID)    // [put] /api/v1/baseProcessRoute/:id
 	g.GET("/:id", h.GetByID)       // [get] /api/v1/baseProcessRoute/:id
 	g.POST("/list", h.List)        // [post] /api/v1/baseProcessRoute/list
+	g.GET("/:id/versions", h.ListVersions)
+	g.POST("/:id/versions", h.CreateVersion)
+	g.GET("/:id/versions/:versionId", h.GetVersion)
+	g.PUT("/:id/versions/:versionId/graph", h.SaveGraph)
+	g.POST("/:id/versions/:versionId/validate", h.ValidateVersion)
+	g.POST("/:id/versions/:versionId/release", h.ReleaseVersion)
+	g.POST("/:id/versions/:versionId/resolve", h.ResolveNext)
 }
