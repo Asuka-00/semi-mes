@@ -27,6 +27,8 @@ var resources = []resource{
 	{"/api/v1/baseRecipe", "base:recipe"},
 	{"/api/v1/wipWorkOrder", "wo:order"},
 	{"/api/v1/wipLot", "lot:lot"},
+	{"/api/v1/wipMove", "wip:move"},
+	{"/api/v1/eqpEquipment", "eqp:equipment"},
 	{"/api/v1/sysUserRole", "system:user"},
 	{"/api/v1/sysUser", "system:user"},
 	{"/api/v1/sysRoleMenu", "system:role"},
@@ -80,8 +82,12 @@ func permissionCode(method, fullPath string) string {
 				return item.perm + ":edit"
 			}
 			switch {
-			case strings.HasSuffix(fullPath, "/resolve"), strings.HasSuffix(fullPath, "/validate"), strings.HasSuffix(fullPath, "/releasedVersions"):
+			case strings.HasSuffix(fullPath, "/resolve"), strings.HasSuffix(fullPath, "/validate"), strings.HasSuffix(fullPath, "/releasedVersions"),
+				strings.HasSuffix(fullPath, "/station"), strings.HasSuffix(fullPath, "/overview"):
 				return item.perm + ":query"
+			case strings.HasSuffix(fullPath, "/trackIn"), strings.HasSuffix(fullPath, "/trackOut"),
+				strings.HasSuffix(fullPath, "/abort"), strings.HasSuffix(fullPath, "/pass"):
+				return item.perm + ":track"
 			case strings.HasSuffix(fullPath, "/release"), strings.HasSuffix(fullPath, "/graph"),
 				strings.HasSuffix(fullPath, "/start"), strings.HasSuffix(fullPath, "/close"),
 				strings.HasSuffix(fullPath, "/hold"), strings.HasSuffix(fullPath, "/releaseHold"),

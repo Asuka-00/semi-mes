@@ -33,7 +33,9 @@ const splitText = ref('');
 function statusLabel(status: string) {
   const map: Record<string, string> = {
     waiting: 'page.mes.wip.waiting',
+    running: 'page.mes.wip.running',
     hold: 'page.mes.wip.hold',
+    scrapped: 'page.mes.wip.scrapped',
     completed: 'page.mes.wip.completed',
     merged: 'page.mes.wip.merged'
   };

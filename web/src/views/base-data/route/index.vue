@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import type { DataTableColumns, SelectOption } from 'naive-ui';
 import { Handle, MarkerType, Position, VueFlow, useVueFlow } from '@vue-flow/core';
 import type { Connection } from '@vue-flow/core';
@@ -343,8 +343,11 @@ async function selectVersion(id: number) {
   fitView({ padding: 0.16 });
 }
 
+const flowWrap = ref<HTMLElement | null>(null);
+let flowObserver: ResizeObserver | null = null;
+
 function fitGraph() {
-  fitView({ padding: 0.16 });
+  fitView({ padding: 0.18, duration: 200 });
 }
 
 function addNode(type: string, position?: { x: number; y: number }) {
@@ -644,7 +647,13 @@ onMounted(async () => {
   await loadMasters();
   const seeded = routes.value.find(item => item.routeCode === 'ROUTE-CMOS');
   if (seeded) await selectRoute(seeded.id);
+  if (flowWrap.value) {
+    flowObserver = new ResizeObserver(() => fitGraph());
+    flowObserver.observe(flowWrap.value);
+  }
 });
+
+onUnmounted(() => flowObserver?.disconnect());
 </script>
 
 <template>
@@ -740,7 +749,7 @@ onMounted(async () => {
           <div class="text-12px opacity-70">{{ $t('page.mes.routeGraph.dragHint') }}</div>
         </div>
 
-        <div class="flow-wrap" @drop="onDrop" @dragover.prevent>
+        <div ref="flowWrap" class="flow-wrap" @drop="onDrop" @dragover.prevent>
           <VueFlow
             id="route-editor"
             v-model:nodes="nodes"
@@ -1040,7 +1049,8 @@ onMounted(async () => {
 .flow-wrap {
   flex: 1;
   min-width: 0;
-  height: 480px;
+  height: calc(100vh - 220px);
+  min-height: 360px;
   border: 1px solid var(--n-border-color, #e5e7eb);
   border-radius: 8px;
 }

@@ -15,10 +15,13 @@ import (
 
 // Business errors for work orders and lots.
 var (
-	ErrWipNotFound = errors.New("wip not found")
-	ErrWipState    = errors.New("wip bad state")
-	ErrWipQty      = errors.New("wip quantity")
-	ErrWipVersion  = errors.New("wip route version")
+	ErrWipNotFound  = errors.New("wip not found")
+	ErrWipState     = errors.New("wip bad state")
+	ErrWipQty       = errors.New("wip quantity")
+	ErrWipVersion   = errors.New("wip route version")
+	ErrWipEquipment = errors.New("wip equipment")
+	ErrWipInspect   = errors.New("wip inspection required")
+	ErrWipTrack     = errors.New("wip track state")
 )
 
 // Column is one sponge-style list filter.
@@ -249,10 +252,12 @@ func StartLot(db *gorm.DB, orderID uint64, qty int, lotType string) (*model.WipL
 			return ErrWipVersion
 		}
 		order.NextLotSeq++
+		now := time.Now()
 		lot := &model.WipLot{
 			LotNo: fmt.Sprintf("%s-%03d", order.OrderNo, order.NextLotSeq), OrderID: order.ID,
 			ProductID: order.ProductID, RouteVersionID: order.RouteVersionID, CurrentNodeKey: start,
 			Quantity: qty, Priority: order.Priority, LotType: lotType, Status: model.LotWaiting, ReworkJSON: "{}",
+			ArrivedAt: &now,
 		}
 		if err := tx.Create(lot).Error; err != nil {
 			return err
@@ -528,87 +533,9 @@ func AdvanceLot(db *gorm.DB, id uint64, in AdvanceInput) (*model.WipLot, routegr
 		if lot.Status != model.LotWaiting {
 			return ErrWipState
 		}
-		graph, err := LoadRouteGraph(tx, lot.RouteVersionID)
+		result, err = moveLot(tx, lot, in, model.EventAdvance)
 		if err != nil {
 			return err
-		}
-		var product model.BaseProduct
-		if err := tx.First(&product, lot.ProductID).Error; err != nil {
-			return err
-		}
-		ctx := routegraph.LotContext{
-			InspectionResult: in.InspectionResult,
-			InspectionGrade:  in.InspectionGrade,
-			DefectCode:       in.DefectCode,
-			ProductCode:      product.ProductCode,
-			Priority:         float64(lot.Priority),
-			LotType:          lot.LotType,
-			ReworkCounts:     decodeRework(lot.ReworkJSON),
-		}
-		result, err = routegraph.Resolve(graph, lot.CurrentNodeKey, ctx)
-		if err != nil {
-			if errors.Is(err, routegraph.ErrNodeNotFound) || errors.Is(err, routegraph.ErrNoPath) {
-				return ErrWipVersion
-			}
-			return err
-		}
-		from := lot.CurrentNodeKey
-		switch result.Action {
-		case routegraph.ActionHold:
-			lot.Status = model.LotHold
-			lot.HoldReasonCode = "REWORK_LIMIT"
-			lot.HoldReason = result.Reason
-			if err := tx.Model(lot).Updates(map[string]any{
-				"status": lot.Status, "hold_reason_code": lot.HoldReasonCode, "hold_reason": lot.HoldReason,
-			}).Error; err != nil {
-				return err
-			}
-			if err := tx.Create(&model.WipLotHistory{
-				LotID: lot.ID, EventType: model.EventHold, FromNodeKey: from, ToNodeKey: from, EdgeKey: result.EdgeKey,
-				ReasonCode: lot.HoldReasonCode, Reason: result.Reason, Quantity: lot.Quantity,
-			}).Error; err != nil {
-				return err
-			}
-		case routegraph.ActionEnd:
-			if err := completeLot(tx, lot, from, result); err != nil {
-				return err
-			}
-		case routegraph.ActionMove:
-			counts := ctx.ReworkCounts
-			if counts == nil {
-				counts = map[string]int{}
-			}
-			for _, e := range graph.Edges {
-				if e.Key == result.EdgeKey && e.Kind == routegraph.EdgeRework {
-					counts[e.Key]++
-					break
-				}
-			}
-			lot.ReworkJSON = encodeRework(counts)
-			lot.CurrentNodeKey = result.NextNodeKey
-			event := model.EventAdvance
-			if result.NextNodeType == routegraph.NodeEnd {
-				event = model.EventComplete
-				lot.Status = model.LotCompleted
-			}
-			if err := tx.Model(lot).Updates(map[string]any{
-				"current_node_key": lot.CurrentNodeKey, "rework_json": lot.ReworkJSON, "status": lot.Status,
-			}).Error; err != nil {
-				return err
-			}
-			if err := tx.Create(&model.WipLotHistory{
-				LotID: lot.ID, EventType: event, FromNodeKey: from, ToNodeKey: lot.CurrentNodeKey, EdgeKey: result.EdgeKey,
-				Reason: result.Reason, Quantity: lot.Quantity,
-			}).Error; err != nil {
-				return err
-			}
-			if lot.Status == model.LotCompleted {
-				if err := refreshOrder(tx, lot.OrderID); err != nil {
-					return err
-				}
-			}
-		default:
-			return ErrWipVersion
 		}
 		updated = lot
 		return nil
@@ -616,9 +543,96 @@ func AdvanceLot(db *gorm.DB, id uint64, in AdvanceInput) (*model.WipLot, routegr
 	return updated, result, err
 }
 
+// moveLot resolves the next node and updates the lot. The caller owns the transaction and the status check.
+func moveLot(tx *gorm.DB, lot *model.WipLot, in AdvanceInput, eventName string) (routegraph.Result, error) {
+	graph, err := LoadRouteGraph(tx, lot.RouteVersionID)
+	if err != nil {
+		return routegraph.Result{}, err
+	}
+	var product model.BaseProduct
+	if err := tx.First(&product, lot.ProductID).Error; err != nil {
+		return routegraph.Result{}, err
+	}
+	ctx := routegraph.LotContext{
+		InspectionResult: in.InspectionResult,
+		InspectionGrade:  in.InspectionGrade,
+		DefectCode:       in.DefectCode,
+		ProductCode:      product.ProductCode,
+		Priority:         float64(lot.Priority),
+		LotType:          lot.LotType,
+		ReworkCounts:     decodeRework(lot.ReworkJSON),
+	}
+	result, err := routegraph.Resolve(graph, lot.CurrentNodeKey, ctx)
+	if err != nil {
+		if errors.Is(err, routegraph.ErrNodeNotFound) || errors.Is(err, routegraph.ErrNoPath) {
+			return routegraph.Result{}, ErrWipVersion
+		}
+		return routegraph.Result{}, err
+	}
+	from := lot.CurrentNodeKey
+	switch result.Action {
+	case routegraph.ActionHold:
+		lot.Status = model.LotHold
+		lot.HoldReasonCode = "REWORK_LIMIT"
+		lot.HoldReason = result.Reason
+		if err := tx.Model(lot).Updates(map[string]any{
+			"status": lot.Status, "hold_reason_code": lot.HoldReasonCode, "hold_reason": lot.HoldReason, "quantity": lot.Quantity,
+		}).Error; err != nil {
+			return result, err
+		}
+		err = tx.Create(&model.WipLotHistory{
+			LotID: lot.ID, EventType: model.EventHold, FromNodeKey: from, ToNodeKey: from, EdgeKey: result.EdgeKey,
+			ReasonCode: lot.HoldReasonCode, Reason: result.Reason, Quantity: lot.Quantity,
+		}).Error
+		return result, err
+	case routegraph.ActionEnd:
+		return result, completeLot(tx, lot, from, result)
+	case routegraph.ActionMove:
+		counts := ctx.ReworkCounts
+		if counts == nil {
+			counts = map[string]int{}
+		}
+		for _, e := range graph.Edges {
+			if e.Key == result.EdgeKey && e.Kind == routegraph.EdgeRework {
+				counts[e.Key]++
+				break
+			}
+		}
+		now := time.Now()
+		lot.ReworkJSON = encodeRework(counts)
+		lot.CurrentNodeKey = result.NextNodeKey
+		lot.ArrivedAt = &now
+		event := eventName
+		if result.NextNodeType == routegraph.NodeEnd {
+			event = model.EventComplete
+			lot.Status = model.LotCompleted
+		} else if lot.Status != model.LotWaiting {
+			lot.Status = model.LotWaiting
+		}
+		if err := tx.Model(lot).Updates(map[string]any{
+			"current_node_key": lot.CurrentNodeKey, "rework_json": lot.ReworkJSON, "status": lot.Status,
+			"quantity": lot.Quantity, "arrived_at": now,
+		}).Error; err != nil {
+			return result, err
+		}
+		if err := tx.Create(&model.WipLotHistory{
+			LotID: lot.ID, EventType: event, FromNodeKey: from, ToNodeKey: lot.CurrentNodeKey, EdgeKey: result.EdgeKey,
+			Reason: result.Reason, Quantity: lot.Quantity,
+		}).Error; err != nil {
+			return result, err
+		}
+		if lot.Status == model.LotCompleted {
+			return result, refreshOrder(tx, lot.OrderID)
+		}
+		return result, nil
+	default:
+		return result, ErrWipVersion
+	}
+}
+
 func completeLot(tx *gorm.DB, lot *model.WipLot, from string, result routegraph.Result) error {
 	lot.Status = model.LotCompleted
-	if err := tx.Model(lot).Update("status", lot.Status).Error; err != nil {
+	if err := tx.Model(lot).Updates(map[string]any{"status": lot.Status, "quantity": lot.Quantity}).Error; err != nil {
 		return err
 	}
 	if err := tx.Create(&model.WipLotHistory{
@@ -643,7 +657,7 @@ func refreshOrder(tx *gorm.DB, orderID uint64) error {
 		return err
 	}
 	var active int64
-	if err := tx.Model(&model.WipLot{}).Where("order_id = ? AND status IN ?", orderID, []string{model.LotWaiting, model.LotHold}).
+	if err := tx.Model(&model.WipLot{}).Where("order_id = ? AND status IN ?", orderID, []string{model.LotWaiting, model.LotRunning, model.LotHold}).
 		Count(&active).Error; err != nil {
 		return err
 	}
