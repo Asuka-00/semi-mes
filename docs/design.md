@@ -307,9 +307,9 @@ flowchart LR
 
 批次绑定已发布的 `route_version_id` 和 `current_node_key`。开批时当前节点是该版本的开始节点。离开节点时调用 3.2.8 的 Resolve。模块 3 的出站和「离开非加工节点」都走这个函数，不另写分支规则。原有的 `POST /wipLot/:id/advance` 仍是同一个插口，给还没进站的批次直接试算用。
 
-工单状态：`created` → `released` → `in_progress` → `completed` → `closed`。只有 `created` 能改产品、路线版本和数量。下达后才能开批。第一批开出后进入 `in_progress`。已投放数量达到计划数量，且没有处于 waiting 或 hold 的批次时，工单变为 `completed`，之后才能关闭。
+工单状态：`created` → `released` → `in_progress` → `completed` → `closed`。只有 `created` 能改产品、路线版本和数量。下达后才能开批。第一批开出后进入 `in_progress`。已投放数量达到计划数量，且没有处于 waiting、running 或 hold 的批次时，工单变为 `completed`，之后才能关闭。
 
-批次号为 `{工单号}-{三位序号}`，序号记在工单上，拆批也继续使用。批次状态：`waiting`、`hold`、`completed`、`merged`。
+批次号为 `{工单号}-{三位序号}`，序号记在工单上，拆批也继续使用。批次状态：`waiting`、`running`、`hold`、`completed`、`scrapped`、`merged`。
 
 #### 3.3.1 工单表 (wip_work_order)
 
@@ -351,7 +351,7 @@ flowchart LR
 
 #### 3.3.3 履历 (wip_lot_history)
 
-记录 start、advance、hold、release、split、merge、complete。字段包含 from/to 节点、边、原因代码、数量和关联批次。这张表是 WIP Track In/Out 之前的履历，不替代以后的 `wip_move_history`。
+记录 start、advance、hold、release、split、merge、complete。字段包含 from/to 节点、边、原因代码、数量和关联批次。过站计时和数量记在 `wip_move`，不写回这张事件表。
 
 #### 3.3.4 谱系 (wip_lot_link)
 
