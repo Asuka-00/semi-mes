@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-dev-frame/sponge/pkg/logger"
+	"gorm.io/gorm"
 
 	"semi-mes/server/internal/bootstrap"
 	"semi-mes/server/internal/config"
@@ -27,24 +28,65 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	defer os.RemoveAll(dir)
-	config.Set(&config.Config{
-		App: config.App{Name: "mes", Env: "test", Host: "127.0.0.1"},
-		Logger: config.Logger{Level: "error", Format: "console"},
+	driver := os.Getenv("MES_TEST_DRIVER")
+	if driver == "" {
+		driver = "sqlite"
+	}
+	dsn := os.Getenv("MES_TEST_DSN")
+	cfg := &config.Config{
+		App:      config.App{Name: "mes", Env: "test", Host: "127.0.0.1"},
+		Logger:   config.Logger{Level: "error", Format: "console"},
+		Features: config.Features{SPC: true},
+		Jwt:      config.Jwt{SignKey: "mes-jwt-secret-key-change-in-production", ExpireHours: 24},
 		Database: config.Database{
-			Driver: "sqlite",
-			Sqlite: config.Sqlite{DBFile: filepath.Join(dir, "mes.db"), MaxIdleConns: 2, MaxOpenConns: 5, ConnMaxLifetime: 10},
+			Driver:     driver,
+			Sqlite:     config.Sqlite{DBFile: filepath.Join(dir, "mes.db"), MaxIdleConns: 2, MaxOpenConns: 5, ConnMaxLifetime: 10},
+			Mysql:      config.Mysql{Dsn: dsn, MaxIdleConns: 5, MaxOpenConns: 10, ConnMaxLifetime: 10},
+			Postgresql: config.Postgresql{Dsn: dsn, MaxIdleConns: 5, MaxOpenConns: 10, ConnMaxLifetime: 10},
 		},
-		Jwt: config.Jwt{SignKey: "mes-jwt-secret-key-change-in-production", ExpireHours: 24},
-	})
+	}
+	config.Set(cfg)
 	if _, err = logger.Init(logger.WithLevel("error"), logger.WithFormat("console")); err != nil {
 		panic(err)
 	}
 	database.InitDB()
+	if err = resetTestSchema(database.GetDB()); err != nil {
+		panic(err)
+	}
 	if err = bootstrap.Seed(database.GetDB()); err != nil {
 		panic(err)
 	}
 	testRouter = routers.NewRouter()
 	os.Exit(m.Run())
+}
+
+func resetTestSchema(db *gorm.DB) error {
+	switch config.Get().Database.Driver {
+	case "mysql":
+		var tables []string
+		if err := db.Raw("SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE()").Scan(&tables).Error; err != nil {
+			return err
+		}
+		if err := db.Exec("SET FOREIGN_KEY_CHECKS = 0").Error; err != nil {
+			return err
+		}
+		for _, table := range tables {
+			if table == "" {
+				continue
+			}
+			if err := db.Exec("DROP TABLE IF EXISTS `" + table + "`").Error; err != nil {
+				return err
+			}
+		}
+		return db.Exec("SET FOREIGN_KEY_CHECKS = 1").Error
+	case "postgresql", "postgres":
+		if err := db.Exec("DROP SCHEMA IF EXISTS public CASCADE").Error; err != nil {
+			return err
+		}
+		return db.Exec("CREATE SCHEMA public").Error
+	default:
+		return nil
+	}
 }
 
 func doJSON(method, path, token string, body any) (int, map[string]any) {

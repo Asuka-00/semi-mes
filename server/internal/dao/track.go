@@ -72,7 +72,7 @@ type StationView struct {
 
 // StatusCount is one bucket on the WIP overview.
 type StatusCount struct {
-	Key   string `json:"key"`
+	Key   string `gorm:"column:bucket" json:"key"`
 	Count int    `json:"count"`
 	Qty   int    `json:"qty"`
 }
@@ -462,18 +462,18 @@ func ListMovesByLot(db *gorm.DB, lotID uint64) ([]MoveView, error) {
 // WIPOverview groups active and held lots.
 func WIPOverview(db *gorm.DB) (*Overview, error) {
 	out := &Overview{}
-	if err := db.Table("wip_lot").Select("status AS key, COUNT(*) AS count, COALESCE(SUM(quantity),0) AS qty").
+	if err := db.Table("wip_lot").Select("status AS bucket, COUNT(*) AS count, COALESCE(SUM(quantity),0) AS qty").
 		Where("deleted_at IS NULL AND status <> ?", model.LotMerged).Group("status").Scan(&out.ByStatus).Error; err != nil {
 		return nil, err
 	}
 	if err := db.Table("wip_lot l").
-		Select("l.current_node_key AS key, COUNT(*) AS count, COALESCE(SUM(l.quantity),0) AS qty").
+		Select("l.current_node_key AS bucket, COUNT(*) AS count, COALESCE(SUM(l.quantity),0) AS qty").
 		Where("l.deleted_at IS NULL AND l.status IN ?", []string{model.LotWaiting, model.LotRunning, model.LotHold}).
 		Group("l.current_node_key").Scan(&out.ByNode).Error; err != nil {
 		return nil, err
 	}
 	if err := db.Table("wip_lot l").
-		Select("p.product_code AS key, COUNT(*) AS count, COALESCE(SUM(l.quantity),0) AS qty").
+		Select("p.product_code AS bucket, COUNT(*) AS count, COALESCE(SUM(l.quantity),0) AS qty").
 		Joins("LEFT JOIN base_product p ON p.id = l.product_id").
 		Where("l.deleted_at IS NULL AND l.status IN ?", []string{model.LotWaiting, model.LotRunning, model.LotHold}).
 		Group("p.product_code").Scan(&out.ByProduct).Error; err != nil {

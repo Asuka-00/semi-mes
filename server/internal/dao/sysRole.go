@@ -33,8 +33,8 @@ type SysRoleDao interface {
 
 type sysRoleDao struct {
 	db    *gorm.DB
-	cache cache.SysRoleCache // if nil, the cache is not used.
-	sfg   *singleflight.Group    // if cache is nil, the sfg is not used.
+	cache cache.SysRoleCache  // if nil, the cache is not used.
+	sfg   *singleflight.Group // if cache is nil, the sfg is not used.
 }
 
 // NewSysRoleDao creating the dao interface
@@ -58,6 +58,9 @@ func (d *sysRoleDao) deleteCache(ctx context.Context, id uint64) error {
 
 // Create a new sysRole, insert the record and the id value is written back to the table
 func (d *sysRoleDao) Create(ctx context.Context, table *model.SysRole) error {
+	if err := rejectActiveRole(d.db.WithContext(ctx), table.RoleCode, 0); err != nil {
+		return err
+	}
 	return d.db.WithContext(ctx).Create(table).Error
 }
 
@@ -90,8 +93,11 @@ func (d *sysRoleDao) updateDataByID(ctx context.Context, db *gorm.DB, table *mod
 	}
 
 	update := map[string]interface{}{}
-	
+
 	if table.RoleCode != "" {
+		if err := rejectActiveRole(db.WithContext(ctx), table.RoleCode, table.ID); err != nil {
+			return err
+		}
 		update["role_code"] = table.RoleCode
 	}
 	if table.RoleName != "" {
@@ -103,7 +109,6 @@ func (d *sysRoleDao) updateDataByID(ctx context.Context, db *gorm.DB, table *mod
 	if table.Status != 0 {
 		update["status"] = table.Status
 	}
-	
 
 	return db.WithContext(ctx).Model(table).Updates(update).Error
 }
@@ -193,6 +198,9 @@ func (d *sysRoleDao) GetByColumns(ctx context.Context, params *query.Params) ([]
 
 // CreateByTx create a record in the database using the provided transaction
 func (d *sysRoleDao) CreateByTx(ctx context.Context, tx *gorm.DB, table *model.SysRole) (uint64, error) {
+	if err := rejectActiveRole(tx.WithContext(ctx), table.RoleCode, 0); err != nil {
+		return 0, err
+	}
 	err := tx.WithContext(ctx).Create(table).Error
 	return table.ID, err
 }

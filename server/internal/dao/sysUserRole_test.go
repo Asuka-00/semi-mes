@@ -42,9 +42,11 @@ func Test_sysUserRoleDao_Create(t *testing.T) {
 	defer d.Close()
 	testData := d.TestData.(*model.SysUserRole)
 
+	insertArgs := d.GetAnyArgs(testData)
+	insertArgs = insertArgs[:len(insertArgs)-1] // gorm.DeletedAt is one column but reflects as two fields
 	d.SQLMock.ExpectBegin()
 	d.SQLMock.ExpectExec("INSERT INTO .*").
-		WithArgs(d.GetAnyArgs(testData)...).
+		WithArgs(insertArgs...).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	d.SQLMock.ExpectCommit()
 
@@ -58,12 +60,11 @@ func Test_sysUserRoleDao_DeleteByID(t *testing.T) {
 	d := newSysUserRoleDao()
 	defer d.Close()
 	testData := d.TestData.(*model.SysUserRole)
-	expectedSQLForDeletion := "DELETE .*"
-	
+	expectedSQLForDeletion := "UPDATE .*"
 
 	d.SQLMock.ExpectBegin()
 	d.SQLMock.ExpectExec(expectedSQLForDeletion).
-		WithArgs(testData.ID).
+		WithArgs(d.AnyTime, testData.ID).
 		WillReturnResult(sqlmock.NewResult(int64(testData.ID), 1))
 	d.SQLMock.ExpectCommit()
 
@@ -96,7 +97,7 @@ func Test_sysUserRoleDao_UpdateByID(t *testing.T) {
 	// zero id error
 	err = d.IDao.(SysUserRoleDao).UpdateByID(d.Ctx, &model.SysUserRole{})
 	assert.Error(t, err)
-	
+
 }
 
 func Test_sysUserRoleDao_GetByID(t *testing.T) {
@@ -186,9 +187,11 @@ func Test_sysUserRoleDao_CreateByTx(t *testing.T) {
 	defer d.Close()
 	testData := d.TestData.(*model.SysUserRole)
 
+	insertArgs := d.GetAnyArgs(testData)
+	insertArgs = insertArgs[:len(insertArgs)-1] // gorm.DeletedAt is one column but reflects as two fields
 	d.SQLMock.ExpectBegin()
 	d.SQLMock.ExpectExec("INSERT INTO .*").
-		WithArgs(d.GetAnyArgs(testData)...).
+		WithArgs(insertArgs...).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	d.SQLMock.ExpectCommit()
 
@@ -202,12 +205,11 @@ func Test_sysUserRoleDao_DeleteByTx(t *testing.T) {
 	d := newSysUserRoleDao()
 	defer d.Close()
 	testData := d.TestData.(*model.SysUserRole)
-	expectedSQLForDeletion := "DELETE .*"
-	
+	expectedSQLForDeletion := "UPDATE .*"
 
 	d.SQLMock.ExpectBegin()
 	d.SQLMock.ExpectExec(expectedSQLForDeletion).
-		WithArgs(testData.ID).
+		WithArgs(d.AnyTime, testData.ID).
 		WillReturnResult(sqlmock.NewResult(int64(testData.ID), 1))
 	d.SQLMock.ExpectCommit()
 

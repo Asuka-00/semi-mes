@@ -80,6 +80,10 @@ func (h *sysUserHandler) Create(c *gin.Context) {
 	ctx := middleware.WrapCtx(c)
 	err = h.iDao.Create(ctx, sysUser)
 	if err != nil {
+		if errors.Is(err, dao.ErrDuplicate) {
+			response.Error(c, ecode.Conflict)
+			return
+		}
 		logger.Error("Create error", logger.Err(err), logger.Any("form", form), middleware.GCtxRequestIDField(c))
 		response.Output(c, ecode.InternalServerError.ToHTTPCode())
 		return
@@ -163,6 +167,10 @@ func (h *sysUserHandler) UpdateByID(c *gin.Context) {
 	ctx := middleware.WrapCtx(c)
 	err = h.iDao.UpdateByID(ctx, sysUser)
 	if err != nil {
+		if errors.Is(err, dao.ErrDuplicate) {
+			response.Error(c, ecode.Conflict)
+			return
+		}
 		logger.Error("UpdateByID error", logger.Err(err), logger.Any("form", form), middleware.GCtxRequestIDField(c))
 		response.Output(c, ecode.InternalServerError.ToHTTPCode())
 		return
@@ -247,7 +255,7 @@ func (h *sysUserHandler) List(c *gin.Context) {
 
 	response.Success(c, gin.H{
 		"sysUsers": data,
-		"total":        total,
+		"total":    total,
 	})
 }
 

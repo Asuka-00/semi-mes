@@ -8,14 +8,14 @@ import (
 
 type BaseWorkshop struct {
 	ID           uint64         `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
-	FactoryID    int            `gorm:"column:factory_id;type:int(11);not null" json:"factoryID"`
+	FactoryID    int            `gorm:"column:factory_id;type:integer;not null" json:"factoryID"`
 	WorkshopCode string         `gorm:"column:workshop_code;type:text;not null" json:"workshopCode"`
 	WorkshopName string         `gorm:"column:workshop_name;type:text;not null" json:"workshopName"`
 	WorkshopType string         `gorm:"column:workshop_type;type:text" json:"workshopType"`
 	Description  string         `gorm:"column:description;type:text" json:"description"`
-	Status       int            `gorm:"column:status;type:int(11);not null" json:"status"`
-	CreatedAt    *time.Time     `gorm:"column:created_at;type:datetime" json:"createdAt"`
-	UpdatedAt    *time.Time     `gorm:"column:updated_at;type:datetime" json:"updatedAt"`
+	Status       int            `gorm:"column:status;type:integer;not null" json:"status"`
+	CreatedAt    *time.Time     `gorm:"column:created_at;type:timestamp" json:"createdAt"`
+	UpdatedAt    *time.Time     `gorm:"column:updated_at;type:timestamp" json:"updatedAt"`
 	DeletedAt    gorm.DeletedAt `gorm:"column:deleted_at;index" json:"-"`
 }
 

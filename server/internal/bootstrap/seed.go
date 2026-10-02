@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"semi-mes/server/internal/config"
 	"semi-mes/server/internal/dao"
 	"semi-mes/server/internal/model"
 	"semi-mes/server/internal/routegraph"
@@ -27,6 +28,7 @@ type menuSeed struct {
 
 // Seed creates tables and the default admin, roles, and menu tree when empty.
 func Seed(db *gorm.DB) error {
+	defer func() { _ = syncSequences(db) }()
 	if err := db.AutoMigrate(
 		&model.SysUser{},
 		&model.SysRole{},
@@ -62,6 +64,7 @@ func Seed(db *gorm.DB) error {
 		&model.QcSpcPolicy{},
 		&model.QcSpcLimit{},
 		&model.QcSpcEvent{},
+		&model.SysNotification{},
 	); err != nil {
 		return err
 	}
@@ -155,7 +158,11 @@ func ensureMenus(db *gorm.DB) error {
 			return err
 		}
 	}
-	return nil
+	status := 0
+	if config.SPCEnabled() {
+		status = 1
+	}
+	return db.Model(&model.SysMenu{}).Where("id IN ?", []uint64{630, 631}).Update("status", status).Error
 }
 
 func seedSampleRoute(db *gorm.DB) error {
@@ -587,6 +594,30 @@ func isSysAdminMenu(menu model.SysMenu) bool {
 	return menu.RouteName == "home" || menu.RouteName == "system" || hasPrefix(menu.RouteName, "system_") || hasPrefix(menu.PermissionCode, "system:")
 }
 
+// syncSequences moves Postgres identity sequences past explicitly inserted ids.
+// MySQL updates AUTO_INCREMENT on those inserts; Postgres does not.
+func syncSequences(db *gorm.DB) error {
+	driver := config.Get().Database.Driver
+	if driver != "postgresql" && driver != "postgres" {
+		return nil
+	}
+	var tables []string
+	if err := db.Raw(`SELECT tablename FROM pg_tables WHERE schemaname = 'public'`).Scan(&tables).Error; err != nil {
+		return err
+	}
+	for _, table := range tables {
+		err := db.Exec(`DO $$ BEGIN
+			IF pg_get_serial_sequence('` + table + `', 'id') IS NOT NULL THEN
+				PERFORM setval(pg_get_serial_sequence('` + table + `', 'id'), GREATEST(COALESCE((SELECT MAX(id) FROM ` + table + `), 1), 1));
+			END IF;
+		END $$;`).Error
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func hasPrefix(s, prefix string) bool {
 	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
 }
@@ -696,6 +727,9 @@ func defaultMenus() []model.SysMenu {
 	}
 	menus := make([]model.SysMenu, 0, len(raw))
 	for _, item := range raw {
+		if !config.SPCEnabled() && (item.ID == 630 || item.ID == 631) {
+			continue
+		}
 		menus = append(menus, model.SysMenu{
 			ID: item.ID, ParentID: item.ParentID, MenuType: item.MenuType, MenuName: item.MenuName,
 			PermissionCode: item.PermissionCode, RouteName: item.RouteName, RoutePath: item.RoutePath,

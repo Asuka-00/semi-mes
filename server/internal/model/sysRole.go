@@ -2,17 +2,19 @@ package model
 
 import (
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type SysRole struct {
-	ID          uint64     `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
-	RoleCode    string     `gorm:"column:role_code;type:text;not null" json:"roleCode"`
-	RoleName    string     `gorm:"column:role_name;type:text;not null" json:"roleName"`
-	Description string     `gorm:"column:description;type:text" json:"description"`
-	Status      int        `gorm:"column:status;type:int(11);not null" json:"status"`
-	CreatedAt   *time.Time `gorm:"column:created_at;type:datetime" json:"createdAt"`
-	UpdatedAt   *time.Time `gorm:"column:updated_at;type:datetime" json:"updatedAt"`
-	DeletedAt   *time.Time `gorm:"column:deleted_at;type:datetime" json:"deletedAt"`
+	ID          uint64         `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
+	RoleCode    string         `gorm:"column:role_code;type:text;not null" json:"roleCode"`
+	RoleName    string         `gorm:"column:role_name;type:text;not null" json:"roleName"`
+	Description string         `gorm:"column:description;type:text" json:"description"`
+	Status      int            `gorm:"column:status;type:integer;not null" json:"status"`
+	CreatedAt   *time.Time     `gorm:"column:created_at;type:timestamp" json:"createdAt"`
+	UpdatedAt   *time.Time     `gorm:"column:updated_at;type:timestamp" json:"updatedAt"`
+	DeletedAt   gorm.DeletedAt `gorm:"column:deleted_at;index" json:"-"`
 }
 
 // TableName table name
@@ -31,5 +33,3 @@ var SysRoleColumnNames = map[string]bool{
 	"updated_at":  true,
 	"deleted_at":  true,
 }
-
-

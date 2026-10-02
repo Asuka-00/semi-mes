@@ -13,9 +13,9 @@ type BaseProduct struct {
 	ProductType string         `gorm:"column:product_type;type:text" json:"productType"`
 	Version     string         `gorm:"column:version;type:text" json:"version"`
 	Description string         `gorm:"column:description;type:text" json:"description"`
-	Status      int            `gorm:"column:status;type:int(11);not null" json:"status"`
-	CreatedAt   *time.Time     `gorm:"column:created_at;type:datetime" json:"createdAt"`
-	UpdatedAt   *time.Time     `gorm:"column:updated_at;type:datetime" json:"updatedAt"`
+	Status      int            `gorm:"column:status;type:integer;not null" json:"status"`
+	CreatedAt   *time.Time     `gorm:"column:created_at;type:timestamp" json:"createdAt"`
+	UpdatedAt   *time.Time     `gorm:"column:updated_at;type:timestamp" json:"updatedAt"`
 	DeletedAt   gorm.DeletedAt `gorm:"column:deleted_at;index" json:"-"`
 }
 

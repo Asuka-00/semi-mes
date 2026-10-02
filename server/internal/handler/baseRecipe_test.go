@@ -103,7 +103,7 @@ func Test_baseRecipeHandler_Create(t *testing.T) {
 	}
 
 	t.Logf("%+v", result)
-	
+
 }
 
 func Test_baseRecipeHandler_DeleteByID(t *testing.T) {

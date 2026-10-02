@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-dev-frame/sponge/pkg/gin/response"
 
+	"semi-mes/server/internal/config"
 	"semi-mes/server/internal/dao"
 	"semi-mes/server/internal/database"
 	"semi-mes/server/internal/ecode"
@@ -225,6 +226,9 @@ func DefectPareto(c *gin.Context) {
 
 // SpcChart returns an I-MR or X-bar chart.
 func SpcChart(c *gin.Context) {
+	if spcDisabled(c) {
+		return
+	}
 	productID, _ := strconv.ParseUint(c.Query("productId"), 10, 64)
 	operationID, _ := strconv.ParseUint(c.Query("operationId"), 10, 64)
 	equipmentID, _ := strconv.ParseUint(c.Query("equipmentId"), 10, 64)
@@ -242,6 +246,9 @@ func SpcChart(c *gin.Context) {
 
 // ListSpcPolicies returns OOC reactions.
 func ListSpcPolicies(c *gin.Context) {
+	if spcDisabled(c) {
+		return
+	}
 	rows, err := dao.ListSpcPolicies(database.GetDB())
 	if err != nil {
 		writeWipErr(c, err)
@@ -252,6 +259,9 @@ func ListSpcPolicies(c *gin.Context) {
 
 // SaveSpcPolicy upserts a reaction.
 func SaveSpcPolicy(c *gin.Context) {
+	if spcDisabled(c) {
+		return
+	}
 	body := policyBody{}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, ecode.InvalidParams)
@@ -269,6 +279,9 @@ func SaveSpcPolicy(c *gin.Context) {
 
 // SaveSpcLimit upserts a manual control limit.
 func SaveSpcLimit(c *gin.Context) {
+	if spcDisabled(c) {
+		return
+	}
 	body := limitBody{}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Error(c, ecode.InvalidParams)
@@ -283,6 +296,14 @@ func SaveSpcLimit(c *gin.Context) {
 		return
 	}
 	response.Success(c, row)
+}
+
+func spcDisabled(c *gin.Context) bool {
+	if config.SPCEnabled() {
+		return false
+	}
+	fail(c, 40003, "error.auth.forbidden")
+	return true
 }
 
 func parseRange(from, to string) (time.Time, time.Time) {

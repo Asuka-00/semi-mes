@@ -16,7 +16,7 @@ ci-lint:
 .PHONY: test
 # Test *_test.go files, the parameter -count=1 means that caching is disabled
 test:
-	go test -count=1 -short ${PKG_LIST}
+	CGO_ENABLED=0 go test -count=1 -short ${PKG_LIST}
 
 
 .PHONY: cover

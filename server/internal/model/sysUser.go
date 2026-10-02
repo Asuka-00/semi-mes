@@ -2,19 +2,21 @@ package model
 
 import (
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type SysUser struct {
-	ID        uint64     `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
-	Username  string     `gorm:"column:username;type:text;not null" json:"username"`
-	Password  string     `gorm:"column:password;type:text;not null" json:"password"`
-	RealName  string     `gorm:"column:real_name;type:text" json:"realName"`
-	Email     string     `gorm:"column:email;type:text" json:"email"`
-	Phone     string     `gorm:"column:phone;type:text" json:"phone"`
-	Status    int        `gorm:"column:status;type:int(11);not null" json:"status"`
-	CreatedAt *time.Time `gorm:"column:created_at;type:datetime" json:"createdAt"`
-	UpdatedAt *time.Time `gorm:"column:updated_at;type:datetime" json:"updatedAt"`
-	DeletedAt *time.Time `gorm:"column:deleted_at;type:datetime" json:"deletedAt"`
+	ID        uint64         `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
+	Username  string         `gorm:"column:username;type:text;not null" json:"username"`
+	Password  string         `gorm:"column:password;type:text;not null" json:"password"`
+	RealName  string         `gorm:"column:real_name;type:text" json:"realName"`
+	Email     string         `gorm:"column:email;type:text" json:"email"`
+	Phone     string         `gorm:"column:phone;type:text" json:"phone"`
+	Status    int            `gorm:"column:status;type:integer;not null" json:"status"`
+	CreatedAt *time.Time     `gorm:"column:created_at;type:timestamp" json:"createdAt"`
+	UpdatedAt *time.Time     `gorm:"column:updated_at;type:timestamp" json:"updatedAt"`
+	DeletedAt gorm.DeletedAt `gorm:"column:deleted_at;index" json:"-"`
 }
 
 // TableName table name
@@ -35,5 +37,3 @@ var SysUserColumnNames = map[string]bool{
 	"updated_at": true,
 	"deleted_at": true,
 }
-
-

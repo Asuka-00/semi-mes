@@ -90,14 +90,13 @@ func (d *sysUserRoleDao) updateDataByID(ctx context.Context, db *gorm.DB, table 
 	}
 
 	update := map[string]interface{}{}
-	
+
 	if table.UserID != 0 {
 		update["user_id"] = table.UserID
 	}
 	if table.RoleID != 0 {
 		update["role_id"] = table.RoleID
 	}
-	
 
 	return db.WithContext(ctx).Model(table).Updates(update).Error
 }

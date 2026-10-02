@@ -239,7 +239,7 @@ func (h *baseProcessRouteHandler) List(c *gin.Context) {
 
 	response.Success(c, gin.H{
 		"baseProcessRoutes": data,
-		"total":        total,
+		"total":             total,
 	})
 }
 

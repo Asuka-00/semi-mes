@@ -61,7 +61,6 @@ func Test_baseFactoryDao_DeleteByID(t *testing.T) {
 	defer d.Close()
 	testData := d.TestData.(*model.BaseFactory)
 	expectedSQLForDeletion := "UPDATE .*"
-	
 
 	d.SQLMock.ExpectBegin()
 	d.SQLMock.ExpectExec(expectedSQLForDeletion).
@@ -98,7 +97,7 @@ func Test_baseFactoryDao_UpdateByID(t *testing.T) {
 	// zero id error
 	err = d.IDao.(BaseFactoryDao).UpdateByID(d.Ctx, &model.BaseFactory{})
 	assert.Error(t, err)
-	
+
 }
 
 func Test_baseFactoryDao_GetByID(t *testing.T) {
@@ -207,7 +206,6 @@ func Test_baseFactoryDao_DeleteByTx(t *testing.T) {
 	defer d.Close()
 	testData := d.TestData.(*model.BaseFactory)
 	expectedSQLForDeletion := "UPDATE .*"
-	
 
 	d.SQLMock.ExpectBegin()
 	d.SQLMock.ExpectExec(expectedSQLForDeletion).

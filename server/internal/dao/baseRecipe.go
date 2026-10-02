@@ -34,7 +34,7 @@ type BaseRecipeDao interface {
 type baseRecipeDao struct {
 	db    *gorm.DB
 	cache cache.BaseRecipeCache // if nil, the cache is not used.
-	sfg   *singleflight.Group    // if cache is nil, the sfg is not used.
+	sfg   *singleflight.Group   // if cache is nil, the sfg is not used.
 }
 
 // NewBaseRecipeDao creating the dao interface
@@ -90,7 +90,7 @@ func (d *baseRecipeDao) updateDataByID(ctx context.Context, db *gorm.DB, table *
 	}
 
 	update := map[string]interface{}{}
-	
+
 	if table.OperationID != 0 {
 		update["operation_id"] = table.OperationID
 	}
@@ -113,7 +113,6 @@ func (d *baseRecipeDao) updateDataByID(ctx context.Context, db *gorm.DB, table *
 	if table.Status != 0 {
 		update["status"] = table.Status
 	}
-	
 
 	return db.WithContext(ctx).Model(table).Updates(update).Error
 }

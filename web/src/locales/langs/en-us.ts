@@ -678,6 +678,7 @@ const local: App.I18n.Schema = {
         defect: 'Defects',
         pareto: 'Defect Pareto',
         spc: 'Control chart',
+        spcOff: 'SPC is off. Set features.spc to true in server/configs/mes.yml to enable it.',
         param: 'Parameter',
         paramName: 'Parameter name',
         unit: 'Unit',
@@ -747,6 +748,11 @@ const local: App.I18n.Schema = {
     closeAll: 'Close All',
     pin: 'Pin Tab',
     unpin: 'Unpin Tab'
+  },
+  notice: {
+    title: 'Notifications',
+    empty: 'No notifications',
+    markAll: 'Mark all read'
   },
   icon: {
     themeConfig: 'Theme Configuration',

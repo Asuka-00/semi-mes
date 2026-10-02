@@ -2,9 +2,11 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import { $t } from '@/locales';
 import { fetchChart, fetchPlans, fetchPolicies, savePolicy } from '@/service/api/quality';
+import { fetchFeatures } from '@/service/api/notice';
 import { fetchEquipment } from '@/service/api/track';
 import type { ChartView, InspectPlan } from '@/service/api/quality';
 
+const spcOn = ref(true);
 const plans = ref<InspectPlan[]>([]);
 const tools = ref<Array<{ id: number; equipmentCode: string }>>([]);
 const chart = ref<ChartView | null>(null);
@@ -79,6 +81,9 @@ async function saveReaction() {
 }
 
 onMounted(async () => {
+  const feature = await fetchFeatures();
+  spcOn.value = Boolean(feature.data?.spc);
+  if (!spcOn.value) return;
   const [planRes, eqpRes, policyRes] = await Promise.all([fetchPlans(), fetchEquipment(), fetchPolicies()]);
   plans.value = planRes.data?.plans || [];
   tools.value = eqpRes.data?.equipment || [];
@@ -95,65 +100,68 @@ const reactions = ['none', 'hold_lot', 'eqp_engineering', 'eqp_down', 'hold_and_
 
 <template>
   <NCard :bordered="false" class="card-wrapper" :title="$t('page.mes.qc.spc')">
-    <NSpace class="mb-12px">
-      <NSelect
-        v-model:value="query.param"
-        class="w-140px"
-        :options="[{ label: 'CD', value: 'CD' }]"
+    <NEmpty v-if="!spcOn" :description="$t('page.mes.qc.spcOff')" />
+    <template v-else>
+      <NSpace class="mb-12px">
+        <NSelect
+          v-model:value="query.param"
+          class="w-140px"
+          :options="[{ label: 'CD', value: 'CD' }]"
+        />
+        <NSelect
+          v-model:value="query.operationId"
+          class="w-180px"
+          clearable
+          :placeholder="$t('page.mes.qc.operation')"
+          :options="plans.map(item => ({ label: item.operationCode || item.planName, value: item.operationID }))"
+        />
+        <NSelect
+          v-model:value="query.equipmentId"
+          class="w-180px"
+          clearable
+          :placeholder="$t('page.mes.track.equipment')"
+          :options="tools.map(item => ({ label: item.equipmentCode, value: item.id }))"
+        />
+        <NInput v-model:value="query.from" class="w-140px" placeholder="YYYY-MM-DD" />
+        <NInput v-model:value="query.to" class="w-140px" placeholder="YYYY-MM-DD" />
+        <NButton type="primary" @click="load">{{ $t('page.mes.track.load') }}</NButton>
+      </NSpace>
+      <div v-if="chart" class="mb-8px">
+        {{ chart.chartType }} · LCL {{ chart.lcl.toFixed(2) }} · CL {{ chart.center.toFixed(2) }} · UCL {{ chart.ucl.toFixed(2) }}
+      </div>
+      <svg v-if="chart && chart.points.length" :viewBox="`0 0 ${width} ${height}`" class="w-full max-w-900px border border-#efeff5">
+        <line :x1="pad" :x2="width - pad" :y1="plot.yUcl" :y2="plot.yUcl" stroke="#d03050" stroke-dasharray="4" />
+        <line :x1="pad" :x2="width - pad" :y1="plot.yCenter" :y2="plot.yCenter" stroke="#18a058" />
+        <line :x1="pad" :x2="width - pad" :y1="plot.yLcl" :y2="plot.yLcl" stroke="#d03050" stroke-dasharray="4" />
+        <path :d="plot.line" fill="none" stroke="#2080f0" stroke-width="2" />
+        <circle
+          v-for="(dot, index) in plot.dots"
+          :key="index"
+          :cx="dot.x"
+          :cy="dot.y"
+          r="5"
+          :fill="dot.bad ? '#d03050' : '#2080f0'"
+        >
+          <title>{{ dot.label }}</title>
+        </circle>
+      </svg>
+      <NEmpty v-else-if="chart" :description="$t('common.noData')" />
+      <NDivider>{{ $t('page.mes.qc.reaction') }}</NDivider>
+      <NSpace>
+        <NSelect v-model:value="policy.onOOC" class="w-220px" :options="reactions.map(item => ({ label: `OOC ${item}`, value: item }))" />
+        <NSelect v-model:value="policy.onOOS" class="w-220px" :options="reactions.map(item => ({ label: `OOS ${item}`, value: item }))" />
+        <NButton @click="saveReaction">{{ $t('common.confirm') }}</NButton>
+      </NSpace>
+      <NDataTable
+        class="mt-16px"
+        :columns="[
+          { title: $t('page.mes.qc.kind'), key: 'kind' },
+          { title: $t('page.mes.qc.rule'), key: 'rule' },
+          { title: $t('page.mes.qc.value'), key: 'value' },
+          { title: $t('page.mes.qc.reaction'), key: 'reaction' }
+        ]"
+        :data="chart?.events || []"
       />
-      <NSelect
-        v-model:value="query.operationId"
-        class="w-180px"
-        clearable
-        :placeholder="$t('page.mes.qc.operation')"
-        :options="plans.map(item => ({ label: item.operationCode || item.planName, value: item.operationID }))"
-      />
-      <NSelect
-        v-model:value="query.equipmentId"
-        class="w-180px"
-        clearable
-        :placeholder="$t('page.mes.track.equipment')"
-        :options="tools.map(item => ({ label: item.equipmentCode, value: item.id }))"
-      />
-      <NInput v-model:value="query.from" class="w-140px" placeholder="YYYY-MM-DD" />
-      <NInput v-model:value="query.to" class="w-140px" placeholder="YYYY-MM-DD" />
-      <NButton type="primary" @click="load">{{ $t('page.mes.track.load') }}</NButton>
-    </NSpace>
-    <div v-if="chart" class="mb-8px">
-      {{ chart.chartType }} · LCL {{ chart.lcl.toFixed(2) }} · CL {{ chart.center.toFixed(2) }} · UCL {{ chart.ucl.toFixed(2) }}
-    </div>
-    <svg v-if="chart && chart.points.length" :viewBox="`0 0 ${width} ${height}`" class="w-full max-w-900px border border-#efeff5">
-      <line :x1="pad" :x2="width - pad" :y1="plot.yUcl" :y2="plot.yUcl" stroke="#d03050" stroke-dasharray="4" />
-      <line :x1="pad" :x2="width - pad" :y1="plot.yCenter" :y2="plot.yCenter" stroke="#18a058" />
-      <line :x1="pad" :x2="width - pad" :y1="plot.yLcl" :y2="plot.yLcl" stroke="#d03050" stroke-dasharray="4" />
-      <path :d="plot.line" fill="none" stroke="#2080f0" stroke-width="2" />
-      <circle
-        v-for="(dot, index) in plot.dots"
-        :key="index"
-        :cx="dot.x"
-        :cy="dot.y"
-        r="5"
-        :fill="dot.bad ? '#d03050' : '#2080f0'"
-      >
-        <title>{{ dot.label }}</title>
-      </circle>
-    </svg>
-    <NEmpty v-else-if="chart" :description="$t('common.noData')" />
-    <NDivider>{{ $t('page.mes.qc.reaction') }}</NDivider>
-    <NSpace>
-      <NSelect v-model:value="policy.onOOC" class="w-220px" :options="reactions.map(item => ({ label: `OOC ${item}`, value: item }))" />
-      <NSelect v-model:value="policy.onOOS" class="w-220px" :options="reactions.map(item => ({ label: `OOS ${item}`, value: item }))" />
-      <NButton @click="saveReaction">{{ $t('common.confirm') }}</NButton>
-    </NSpace>
-    <NDataTable
-      class="mt-16px"
-      :columns="[
-        { title: $t('page.mes.qc.kind'), key: 'kind' },
-        { title: $t('page.mes.qc.rule'), key: 'rule' },
-        { title: $t('page.mes.qc.value'), key: 'value' },
-        { title: $t('page.mes.qc.reaction'), key: 'reaction' }
-      ]"
-      :data="chart?.events || []"
-    />
+    </template>
   </NCard>
 </template>

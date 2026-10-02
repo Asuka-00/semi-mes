@@ -34,7 +34,7 @@ type BaseOperationDao interface {
 type baseOperationDao struct {
 	db    *gorm.DB
 	cache cache.BaseOperationCache // if nil, the cache is not used.
-	sfg   *singleflight.Group    // if cache is nil, the sfg is not used.
+	sfg   *singleflight.Group      // if cache is nil, the sfg is not used.
 }
 
 // NewBaseOperationDao creating the dao interface
@@ -90,7 +90,7 @@ func (d *baseOperationDao) updateDataByID(ctx context.Context, db *gorm.DB, tabl
 	}
 
 	update := map[string]interface{}{}
-	
+
 	if table.RouteID != 0 {
 		update["route_id"] = table.RouteID
 	}
@@ -111,7 +111,6 @@ func (d *baseOperationDao) updateDataByID(ctx context.Context, db *gorm.DB, tabl
 	if table.Status != 0 {
 		update["status"] = table.Status
 	}
-	
 
 	return db.WithContext(ctx).Model(table).Updates(update).Error
 }

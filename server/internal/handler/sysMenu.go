@@ -232,7 +232,7 @@ func (h *sysMenuHandler) List(c *gin.Context) {
 
 	response.Success(c, gin.H{
 		"sysMenus": data,
-		"total":        total,
+		"total":    total,
 	})
 }
 

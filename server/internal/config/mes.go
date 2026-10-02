@@ -41,6 +41,20 @@ type Config struct {
 	Logger     Logger       `yaml:"logger" json:"logger"`
 	NacosRd    NacosRd      `yaml:"nacosRd" json:"nacosRd"`
 	Redis      Redis        `yaml:"redis" json:"redis"`
+	Features   Features     `yaml:"features" json:"features"`
+}
+
+// SPCEnabled reports whether SPC charts, menus, and OOC reactions are active.
+// The flag defaults to off when the config omits it.
+func SPCEnabled() bool {
+	if config == nil {
+		return false
+	}
+	return config.Features.SPC
+}
+
+type Features struct {
+	SPC bool `yaml:"spc" json:"spc"`
 }
 
 type Jwt struct {

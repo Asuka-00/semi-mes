@@ -61,7 +61,6 @@ func Test_baseProcessRouteDao_DeleteByID(t *testing.T) {
 	defer d.Close()
 	testData := d.TestData.(*model.BaseProcessRoute)
 	expectedSQLForDeletion := "UPDATE .*"
-	
 
 	d.SQLMock.ExpectBegin()
 	d.SQLMock.ExpectExec(expectedSQLForDeletion).
@@ -97,7 +96,7 @@ func Test_baseProcessRouteDao_UpdateByID(t *testing.T) {
 	// zero id error
 	err = d.IDao.(BaseProcessRouteDao).UpdateByID(d.Ctx, &model.BaseProcessRoute{})
 	assert.Error(t, err)
-	
+
 }
 
 func Test_baseProcessRouteDao_GetByID(t *testing.T) {
@@ -206,7 +205,6 @@ func Test_baseProcessRouteDao_DeleteByTx(t *testing.T) {
 	defer d.Close()
 	testData := d.TestData.(*model.BaseProcessRoute)
 	expectedSQLForDeletion := "UPDATE .*"
-	
 
 	d.SQLMock.ExpectBegin()
 	d.SQLMock.ExpectExec(expectedSQLForDeletion).

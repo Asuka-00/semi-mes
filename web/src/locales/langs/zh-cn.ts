@@ -674,6 +674,7 @@ const local: App.I18n.Schema = {
         defect: '缺陷记录',
         pareto: '缺陷柏拉图',
         spc: '控制图',
+        spcOff: 'SPC 已关闭。需要时在 server/configs/mes.yml 将 features.spc 设为 true。',
         param: '参数',
         paramName: '参数名称',
         unit: '单位',
@@ -743,6 +744,11 @@ const local: App.I18n.Schema = {
     closeAll: '关闭所有',
     pin: '固定标签',
     unpin: '取消固定'
+  },
+  notice: {
+    title: '通知',
+    empty: '暂无通知',
+    markAll: '全部已读'
   },
   icon: {
     themeConfig: '主题配置',

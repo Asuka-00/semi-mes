@@ -1,5 +1,9 @@
 # If you need to convert YAML to a Go struct, please execute the command: make update-config
 
+# feature flags. SPC stays in the codebase but is hidden and does not react unless enabled.
+features:
+  spc: false
+
 # app settings
 app:
   name: "mes"      # server name

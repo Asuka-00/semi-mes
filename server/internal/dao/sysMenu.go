@@ -33,8 +33,8 @@ type SysMenuDao interface {
 
 type sysMenuDao struct {
 	db    *gorm.DB
-	cache cache.SysMenuCache // if nil, the cache is not used.
-	sfg   *singleflight.Group    // if cache is nil, the sfg is not used.
+	cache cache.SysMenuCache  // if nil, the cache is not used.
+	sfg   *singleflight.Group // if cache is nil, the sfg is not used.
 }
 
 // NewSysMenuDao creating the dao interface
@@ -90,7 +90,7 @@ func (d *sysMenuDao) updateDataByID(ctx context.Context, db *gorm.DB, table *mod
 	}
 
 	update := map[string]interface{}{}
-	
+
 	update["parent_id"] = table.ParentID
 	update["menu_type"] = table.MenuType
 	if table.MenuName != "" {
@@ -115,7 +115,6 @@ func (d *sysMenuDao) updateDataByID(ctx context.Context, db *gorm.DB, table *mod
 	if table.Status != 0 {
 		update["status"] = table.Status
 	}
-	
 
 	return db.WithContext(ctx).Model(table).Updates(update).Error
 }

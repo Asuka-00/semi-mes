@@ -36,6 +36,30 @@ const reason = ref('');
 const lotId = computed(() => Number(props.id || route.params.id));
 const lotFlow = ref<HTMLElement | null>(null);
 
+const flowNodes = computed(() =>
+  nodes.value.map(node => ({
+    id: String(node.nodeKey),
+    position: { x: Number(node.posX || 0), y: Number(node.posY || 0) },
+    data: { label: node.name || node.nodeKey },
+    style:
+      node.nodeKey === lot.value?.currentNodeKey
+        ? { border: '2px solid #18a058', background: '#e8f7ee', borderRadius: '8px', padding: '8px 12px' }
+        : { borderRadius: '8px', padding: '8px 12px' }
+  }))
+);
+
+const flowEdges = computed(() =>
+  edges.value.map(edge => ({
+    id: String(edge.edgeKey),
+    source: String(edge.fromKey),
+    target: String(edge.toKey),
+    label: edge.edgeKind === 'rework' ? $t('page.mes.routeGraph.rework') : edge.isDefault ? $t('page.mes.routeGraph.defaultEdge') : edge.label || '',
+    animated: edge.edgeKind === 'rework',
+    style: edge.edgeKind === 'rework' ? { stroke: '#f0a020' } : {},
+    markerEnd: MarkerType.ArrowClosed
+  }))
+);
+
 async function fitLot() {
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const fitted = await fitView({ padding: 0.2, duration: 0 });
@@ -66,30 +90,6 @@ async function fitLot() {
     zoom
   });
 }
-
-const flowNodes = computed(() =>
-  nodes.value.map(node => ({
-    id: String(node.nodeKey),
-    position: { x: Number(node.posX || 0), y: Number(node.posY || 0) },
-    data: { label: node.name || node.nodeKey },
-    style:
-      node.nodeKey === lot.value?.currentNodeKey
-        ? { border: '2px solid #18a058', background: '#e8f7ee', borderRadius: '8px', padding: '8px 12px' }
-        : { borderRadius: '8px', padding: '8px 12px' }
-  }))
-);
-
-const flowEdges = computed(() =>
-  edges.value.map(edge => ({
-    id: String(edge.edgeKey),
-    source: String(edge.fromKey),
-    target: String(edge.toKey),
-    label: edge.edgeKind === 'rework' ? $t('page.mes.routeGraph.rework') : edge.isDefault ? $t('page.mes.routeGraph.defaultEdge') : edge.label || '',
-    animated: edge.edgeKind === 'rework',
-    style: edge.edgeKind === 'rework' ? { stroke: '#f0a020' } : {},
-    markerEnd: MarkerType.ArrowClosed
-  }))
-);
 
 const historyColumns = computed<DataTableColumns<Record<string, any>>>(() => [
   { title: $t('page.mes.wip.event'), key: 'eventType', width: 120, render: row => eventLabel(row.eventType) },

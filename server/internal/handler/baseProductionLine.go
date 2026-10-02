@@ -232,7 +232,7 @@ func (h *baseProductionLineHandler) List(c *gin.Context) {
 
 	response.Success(c, gin.H{
 		"baseProductionLines": data,
-		"total":        total,
+		"total":               total,
 	})
 }
 

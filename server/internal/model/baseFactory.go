@@ -13,9 +13,9 @@ type BaseFactory struct {
 	Address     string         `gorm:"column:address;type:text" json:"address"`
 	Contact     string         `gorm:"column:contact;type:text" json:"contact"`
 	Phone       string         `gorm:"column:phone;type:text" json:"phone"`
-	Status      int            `gorm:"column:status;type:int(11);not null" json:"status"`
-	CreatedAt   *time.Time     `gorm:"column:created_at;type:datetime" json:"createdAt"`
-	UpdatedAt   *time.Time     `gorm:"column:updated_at;type:datetime" json:"updatedAt"`
+	Status      int            `gorm:"column:status;type:integer;not null" json:"status"`
+	CreatedAt   *time.Time     `gorm:"column:created_at;type:timestamp" json:"createdAt"`
+	UpdatedAt   *time.Time     `gorm:"column:updated_at;type:timestamp" json:"updatedAt"`
 	DeletedAt   gorm.DeletedAt `gorm:"column:deleted_at;index" json:"-"`
 }
 
