@@ -123,12 +123,48 @@ export const generatedRoutes: GeneratedRoute[] = [
     },
     children: [
       {
+        name: 'equipment_board',
+        path: '/equipment/board',
+        component: 'view.equipment_board',
+        meta: {
+          title: 'equipment_board',
+          i18nKey: 'route.equipment_board'
+        }
+      },
+      {
+        name: 'equipment_detail',
+        path: '/equipment/detail/:id',
+        component: 'view.equipment_detail',
+        meta: {
+          title: 'equipment_detail',
+          i18nKey: 'route.equipment_detail'
+        }
+      },
+      {
         name: 'equipment_list',
         path: '/equipment/list',
         component: 'view.equipment_list',
         meta: {
           title: 'equipment_list',
           i18nKey: 'route.equipment_list'
+        }
+      },
+      {
+        name: 'equipment_pm-plan',
+        path: '/equipment/pm-plan',
+        component: 'view.equipment_pm-plan',
+        meta: {
+          title: 'equipment_pm-plan',
+          i18nKey: 'route.equipment_pm-plan'
+        }
+      },
+      {
+        name: 'equipment_pm-task',
+        path: '/equipment/pm-task',
+        component: 'view.equipment_pm-task',
+        meta: {
+          title: 'equipment_pm-task',
+          i18nKey: 'route.equipment_pm-task'
         }
       }
     ]

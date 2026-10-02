@@ -403,6 +403,10 @@ func writeWipErr(c *gin.Context, err error) {
 		c.JSON(200, gin.H{"code": 40009, "msg": i18n.T(c, "error.wip.version"), "data": struct{}{}})
 	case errors.Is(err, dao.ErrWipEquipment):
 		c.JSON(200, gin.H{"code": 40009, "msg": i18n.T(c, "error.wip.equipment"), "data": struct{}{}})
+	case errors.Is(err, dao.ErrEqpState):
+		c.JSON(200, gin.H{"code": 40009, "msg": i18n.T(c, "error.eqp.state"), "data": struct{}{}})
+	case errors.Is(err, dao.ErrEqpPM):
+		c.JSON(200, gin.H{"code": 40009, "msg": i18n.T(c, "error.eqp.pm"), "data": struct{}{}})
 	case errors.Is(err, dao.ErrWipInspect):
 		c.JSON(200, gin.H{"code": 40009, "msg": i18n.T(c, "error.wip.inspect"), "data": struct{}{}})
 	case errors.Is(err, dao.ErrWipTrack):

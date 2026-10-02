@@ -363,13 +363,13 @@ flowchart LR
 
 拆批只允许 waiting，子批数量之和必须小于母批，母批留下余数，子批停在同一节点并复制返工次数。合批要求同一工单、同一路线版本、同一当前节点，且都是 waiting。被并入的批次状态改为 merged，数量归零。
 
-返工次数达到上限时，Resolve 返回 Hold，批次停在当前节点，原因代码 `REWORK_LIMIT`。解除 Hold 只恢复 waiting，不移动节点。
+返工次数达到上限时，Resolve 返回 Hold，批次停在当前节点，原因代码 `REWORK_LIMIT`。示例路线的返工边挂在判定节点上，所以超限发生在离开判定节点的 Pass，而不是加工节点的 Track Out。解除 Hold 只恢复 waiting，不移动节点。
 
 ### 3.4 模块3：WIP跟踪 (WIP Tracking)
 
 加工节点必须先 Track In 再 Track Out。开始节点和判定节点没有设备，用「离开节点」直接调用 Resolve。结束节点不再过站。
 
-Track In 要求批次是 waiting、数量大于 0、不在 Hold，当前节点是工序，设备存在且不是 down，并且设备组与节点的 `equipment_group` 一致。节点没有设备组时，允许任意未停机设备。配方缺省用节点上的配方；如果另选配方，必须属于该工序。操作员取当前登录用户。排队时间是到达当前节点到进站的秒数。
+Track In 要求批次是 waiting、数量大于 0、不在 Hold，当前节点是工序。设备必须存在，状态只能是待机、工程，或尚未满载的生产；计划停机、非计划停机和非排产都会拒绝。设备组要与节点的 `equipment_group` 一致；节点没有设备组时不限制组。若设备配置了能力，工序和配方必须命中，配方 ID 为 0 表示任意配方。超期且计划勾选了拦截进站的 PM 也会拒绝。进站成功后设备变为生产，出站或取消进站且没有其他在制批次时回到进站前的待机或工程。配方缺省用节点上的配方；如果另选配方，必须属于该工序。操作员取当前登录用户。排队时间是到达当前节点到进站的秒数。
 
 Track Out 要求批次是 running，并且有一条未关闭的进站记录。出站数量加报废数量必须等于进站数量。报废大于 0 时原因代码只能是 BROKEN、PARTICLE、SCRATCH、OTHER。出站数量为 0 时批次变为 scrapped，不再往下走。否则调用 Resolve：分支、返工、返工超限 Hold，或进入结束节点后 completed。加工时间是出站减进站。若离开的节点上有引用 `inspection.*` 或 `defect.*` 的非默认边，必须提交检验或量测结果。
 
@@ -383,51 +383,38 @@ Track Out 要求批次是 running，并且有一条未关闭的进站记录。�
 
 ### 3.5 模块4：设备管理 (Equipment Management)
 
-模块 3 先落一张可被模块 4 直接加列的设备表 `eqp_equipment`：编码、名称、设备组、类型、状态（idle / down）、产线 ID、型号、厂商，以及软删除。Track In 只认设备组、状态不是 down、以及记录存在。模块 4 应在这张表上补状态履历和 PM，不要另建一张设备主表。下面的字段是模块 4 的目标，其中 PM 表尚未实现。
+设备主数据仍是模块 3 的 `eqp_equipment`，本阶段只加列，不另建主表。状态沿用原来的 `status` 列，取值改成 SEMI E10 风格：`productive`、`standby`、`engineering`、`scheduled_down`、`unscheduled_down`、`non_scheduled`。旧值 `idle` 读成待机，`down` 读成非计划停机。
 
-#### 3.5.0 当前已落地的设备占位
+允许的人工切换写在 `eqpTransitions`。生产状态只由进站写入、出站或取消进站在没有其他在制批次时写回 `resume_state`（待机或工程）。人工不能把设备改成生产；生产中只允许切到非计划停机。同状态重复切换会被拒绝。原因代码包括 `PROD_START`、`PROD_END`、`ENG_SETUP`、`ENG_DONE`、`PM_START`、`PM_DONE`、`BREAKDOWN`、`REPAIR_DONE`、`NO_WIP`、`SHIFT_END`、`SHIFT_START`、`OTHER`。
+
+`eqp_state_log` 记录每一次状态区间：来源、目标、原因、操作员、开始、结束和持续秒数。当前状态那一行的结束时间为空。
+
+进站还要同时满足：设备组与工序节点一致（节点有设备组时）、状态是待机、工程或未满的生产、未超过容量（容量为 0 时按腔室数，再没有则按 1）、能力匹配、以及没有配置为拦截进站的超期 PM。`eqp_capability` 为空时只看设备组；有记录时工序必须命中，配方 ID 为 0 表示该工序任意配方。
+
+#### 3.5.1 设备台账 (eqp_equipment)
 
 | 字段名 | 说明 |
 |--------|------|
-| equipment_code | 唯一编码 |
-| equipment_group | 与工艺节点的 equipment_group 对应，例如 PHOTO |
-| status | idle 可进站，down 拒绝进站 |
-| line_id | 先为 0，模块 4 再挂产线 |
+| equipment_code / equipment_name | 编码唯一，名称必填 |
+| equipment_group / equipment_type | 设备组对应工艺节点，类型用于分类 |
+| status / resume_state | 当前 E10 状态，以及离开生产后要回到的待机或工程 |
+| model_name / manufacturer / serial_no | 型号、厂商、序列号 |
+| location / line_id | 位置和产线。产线可以为 0 |
+| chamber_count / capacity | 腔室只记数量，不跟踪单腔。容量是同时在制批次数 |
+| install_date | 安装日期，可空 |
+| deleted_at | `gorm.DeletedAt` 软删除。有在制批次或处于生产状态时不能删 |
 
-模块 4 的目标字段如下，当前表只实现了其中能支撑进站的部分。
+#### 3.5.2 能力 (eqp_capability)
 
-#### 3.5.1 设备台账目标 (eqp_equipment)
+一行表示这台设备能跑的一道工序，以及可选配方。没有行就按设备组放行。
 
-| 字段名 | 类型 | 说明 |
-|--------|------|------|
-| id | bigint | 主键ID |
-| equipment_code | varchar(50) | 设备编码，唯一 |
-| equipment_name | varchar(100) | 设备名称 |
-| line_id | bigint | 所属生产线ID |
-| equipment_type | varchar(50) | 设备类型 |
-| model | varchar(50) | 型号 |
-| manufacturer | varchar(100) | 厂商 |
-| install_date | date | 安装日期 |
-| status | varchar(20) | 状态：IDLE, RUNNING, DOWN, PM, MAINTENANCE |
-| created_at | timestamp | 创建时间 |
-| updated_at | timestamp | 更新时间 |
-| deleted_at | timestamp | 软删除时间 |
+#### 3.5.3 预防性维护
 
-#### 3.5.2 预防性维护表 (eqp_pm_plan)
+`eqp_pm_plan` 可以挂在一台设备上，也可以 `equipment_id = 0` 挂在整个设备组。触发是 `time`、`count` 或 `both`。时间看 `next_due_at` 和 `interval_days`。计数看 `lots_since` 和 `interval_count`，每完成一次出站加 1，计的是批次数，不是晶圆片数。`block_track_in` 为真时，到期且仍是 due/overdue 的任务会拒绝进站。
 
-| 字段名 | 类型 | 说明 |
-|--------|------|------|
-| id | bigint | 主键ID |
-| equipment_id | bigint | 设备ID |
-| pm_type | varchar(50) | PM类型：DAILY, WEEKLY, MONTHLY, QUARTERLY |
-| pm_name | varchar(100) | PM名称 |
-| interval_days | int | 间隔天数 |
-| last_pm_date | date | 上次PM日期 |
-| next_pm_date | date | 下次PM日期 |
-| status | tinyint | 状态：1-启用，0-禁用 |
-| created_at | timestamp | 创建时间 |
-| updated_at | timestamp | 更新时间 |
-| deleted_at | timestamp | 软删除时间 |
+列表和生成接口都会调用 `EnsurePmTasks`。到期且没有未完成任务时生成 `eqp_pm_task`，到期日已过则状态是 overdue，否则是 due。开始 PM 要求设备没有在制批次，并把设备切到计划停机。完成时每条检查项都要有 pass 或 fail，整单结果也是 pass 或 fail。完成后清零批次数，并按间隔天数推下次到期。若该设备没有其他执行中的 PM，且当前是计划停机，则回到待机。
+
+状态看板统计各状态台数、超期任务数，以及过去 24 小时生产状态重叠秒数占 86400 的比例。
 
 ### 3.6 模块5：质量管理 (Quality Management)
 
@@ -479,7 +466,10 @@ Track Out 要求批次是 running，并且有一条未关闭的进站记录。�
 [wip_lot] 1---N [wip_move_history]
 
 [base_production_line] 1---N [eqp_equipment]
+[eqp_equipment] 1---N [eqp_capability]
+[eqp_equipment] 1---N [eqp_state_log]
 [eqp_equipment] 1---N [eqp_pm_plan]
+[eqp_pm_plan] 1---N [eqp_pm_task]
 [eqp_equipment] 1---N [wip_move_history]
 
 [wip_lot] 1---N [qc_inspection]
@@ -876,8 +866,18 @@ WIP跟踪 (wip)
   ├── 过站工位 (wip:move:query，进站/出站按钮 wip:move:track)
   ├── 在制总览 (wip:move:query)
   └── 流转记录 (wip:move:query)
-设备管理 (equipment) - 占位台账，模块 4 扩展同一张表
-  └── 设备台账 (eqp:equipment:query)
+设备管理 (equipment)
+  ├── 设备台账 (eqp:equipment:query)
+  │   ├── 新增 (eqp:equipment:add)
+  │   ├── 编辑 / 切换状态 (eqp:equipment:edit)
+  │   └── 删除 (eqp:equipment:delete)
+  ├── 设备详情（菜单隐藏）
+  ├── 设备状态看板 (eqp:equipment:query)
+  ├── PM 计划 (eqp:pm:query)
+  │   ├── 新增 (eqp:pm:add)
+  │   ├── 编辑 / 开始 / 完成 (eqp:pm:edit)
+  │   └── 删除 (eqp:pm:delete)
+  └── PM 任务 (eqp:pm:query)
 质量管理 (quality) - 待实现
   └── 检验记录 (qc:inspection:query)
 ```
@@ -929,10 +929,13 @@ WIP跟踪 (wip)
 - ✅ 设备占位表，按设备组限制进站
 - 未做：设备状态切换、PM、独立的量测录入页。检验结果在出站或离开判定节点时提交
 
-### 阶段4：设备管理
-- 设备台账
-- 设备状态监控
-- PM计划和执行
+### 阶段4：设备管理（本次）
+- ✅ 在原 `eqp_equipment` 上补台账字段、能力、列表搜索和增删改
+- ✅ SEMI E10 风格状态、允许的切换、原因代码和带时长的履历
+- ✅ 进站占用为生产，出站或取消进站后释放；停机、满载、能力不符、超期且配置拦截的 PM 拒绝进站
+- ✅ 按时间或批次数的 PM 计划、自动生成任务、检查项执行，PM 期间切到计划停机
+- ✅ 台账、详情、状态切换、PM 计划、PM 任务、状态看板
+- 未做：单腔或端口状态；PM 计数按出站批次而不是晶圆片数；没有 PM 日历和通知；完成 PM 后从计划停机回到待机，不会回到进 PM 前的工程状态；Sponge 生成的旧表仍是物理删除
 
 ### 阶段5：质量管理
 - 检验计划

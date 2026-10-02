@@ -29,7 +29,11 @@ declare module "@elegant-router/types" {
     "base-data_route": "/base-data/route";
     "base-data_workshop": "/base-data/workshop";
     "equipment": "/equipment";
+    "equipment_board": "/equipment/board";
+    "equipment_detail": "/equipment/detail/:id";
     "equipment_list": "/equipment/list";
+    "equipment_pm-plan": "/equipment/pm-plan";
+    "equipment_pm-task": "/equipment/pm-task";
     "home": "/home";
     "iframe-page": "/iframe-page/:url";
     "login": "/login/:module(pwd-login|code-login|register|reset-pwd|bind-wechat)?";
@@ -120,7 +124,11 @@ declare module "@elegant-router/types" {
     | "base-data_recipe"
     | "base-data_route"
     | "base-data_workshop"
+    | "equipment_board"
+    | "equipment_detail"
     | "equipment_list"
+    | "equipment_pm-plan"
+    | "equipment_pm-task"
     | "home"
     | "lot_detail"
     | "lot_list"

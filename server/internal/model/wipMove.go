@@ -6,18 +6,24 @@ import (
 	"gorm.io/gorm"
 )
 
-// EqpEquipment is the minimal equipment row Track In checks.
-// Module 4 should extend this table (status history, PM plans) instead of replacing it.
+// EqpEquipment is the equipment master. Module 4 extends this table; do not add a second one.
+// Status is a SEMI E10-style state. Manufacturer is the vendor. ModelName is the model.
 type EqpEquipment struct {
 	ID             uint64         `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
 	EquipmentCode  string         `gorm:"column:equipment_code;type:varchar(50);not null;uniqueIndex" json:"equipmentCode"`
 	EquipmentName  string         `gorm:"column:equipment_name;type:varchar(100);not null" json:"equipmentName"`
 	EquipmentGroup string         `gorm:"column:equipment_group;type:varchar(100);index" json:"equipmentGroup"`
 	EquipmentType  string         `gorm:"column:equipment_type;type:varchar(50)" json:"equipmentType"`
-	Status         string         `gorm:"column:status;type:varchar(20);not null" json:"status"`
+	Status         string         `gorm:"column:status;type:varchar(30);not null" json:"status"`
 	LineID         uint64         `gorm:"column:line_id" json:"lineID"`
 	ModelName      string         `gorm:"column:model_name;type:varchar(50)" json:"modelName"`
 	Manufacturer   string         `gorm:"column:manufacturer;type:varchar(100)" json:"manufacturer"`
+	SerialNo       string         `gorm:"column:serial_no;type:varchar(80)" json:"serialNo"`
+	Location       string         `gorm:"column:location;type:varchar(100)" json:"location"`
+	ChamberCount   int            `gorm:"column:chamber_count" json:"chamberCount"`
+	Capacity       int            `gorm:"column:capacity" json:"capacity"`
+	InstallDate    *time.Time     `gorm:"column:install_date" json:"installDate"`
+	ResumeState    string         `gorm:"column:resume_state;type:varchar(30)" json:"resumeState"`
 	CreatedAt      *time.Time     `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt      *time.Time     `gorm:"column:updated_at" json:"updatedAt"`
 	DeletedAt      gorm.DeletedAt `gorm:"column:deleted_at;index" json:"-"`

@@ -48,6 +48,10 @@ func Seed(db *gorm.DB) error {
 		&model.WipLotHistory{},
 		&model.WipLotLink{},
 		&model.EqpEquipment{},
+		&model.EqpCapability{},
+		&model.EqpStateLog{},
+		&model.EqpPmPlan{},
+		&model.EqpPmTask{},
 		&model.WipMove{},
 	); err != nil {
 		return err
@@ -208,18 +212,21 @@ func seedShopfloorFromExisting(db *gorm.DB) error {
 
 func seedShopfloor(db *gorm.DB, productID, versionID uint64) error {
 	tools := []model.EqpEquipment{
-		{EquipmentCode: "WET-01", EquipmentName: "清洗槽 Wet Bench", EquipmentGroup: "WET", EquipmentType: "WET", Status: model.EqpIdle},
-		{EquipmentCode: "PHOTO-01", EquipmentName: "光刻机 Stepper", EquipmentGroup: "PHOTO", EquipmentType: "PHOTO", Status: model.EqpIdle},
-		{EquipmentCode: "PHOTO-09", EquipmentName: "光刻机（停机）", EquipmentGroup: "PHOTO", EquipmentType: "PHOTO", Status: model.EqpDown},
-		{EquipmentCode: "METRO-01", EquipmentName: "检测机 Metrology", EquipmentGroup: "METRO", EquipmentType: "METRO", Status: model.EqpIdle},
-		{EquipmentCode: "ETCH-01", EquipmentName: "刻蚀机 Etcher", EquipmentGroup: "ETCH", EquipmentType: "ETCH", Status: model.EqpIdle},
-		{EquipmentCode: "ENG-01", EquipmentName: "工程台 Eng Bench", EquipmentGroup: "ENG", EquipmentType: "ENG", Status: model.EqpIdle},
+		{EquipmentCode: "WET-01", EquipmentName: "清洗槽 Wet Bench", EquipmentGroup: "WET", EquipmentType: "WET", Status: model.EqpStandby, Capacity: 2, ChamberCount: 2, Manufacturer: "Screen", ModelName: "SU-3200", SerialNo: "WET-2401", Location: "Bay A1"},
+		{EquipmentCode: "PHOTO-01", EquipmentName: "光刻机 Stepper", EquipmentGroup: "PHOTO", EquipmentType: "PHOTO", Status: model.EqpStandby, Capacity: 1, ChamberCount: 1, Manufacturer: "ASML", ModelName: "XT-860", SerialNo: "PH-1108", Location: "Bay B2"},
+		{EquipmentCode: "PHOTO-09", EquipmentName: "光刻机（停机）", EquipmentGroup: "PHOTO", EquipmentType: "PHOTO", Status: model.EqpUnscheduledDown, Capacity: 1, ChamberCount: 1, Manufacturer: "ASML", ModelName: "XT-400", SerialNo: "PH-0902", Location: "Bay B3"},
+		{EquipmentCode: "METRO-01", EquipmentName: "检测机 Metrology", EquipmentGroup: "METRO", EquipmentType: "METRO", Status: model.EqpEngineering, Capacity: 1, ChamberCount: 1, Manufacturer: "KLA", ModelName: "29xx", SerialNo: "MT-331", Location: "Bay C1"},
+		{EquipmentCode: "ETCH-01", EquipmentName: "刻蚀机 Etcher", EquipmentGroup: "ETCH", EquipmentType: "ETCH", Status: model.EqpStandby, Capacity: 1, ChamberCount: 2, Manufacturer: "Lam", ModelName: "Kiyo", SerialNo: "ET-778", Location: "Bay D1"},
+		{EquipmentCode: "ENG-01", EquipmentName: "工程台 Eng Bench", EquipmentGroup: "ENG", EquipmentType: "ENG", Status: model.EqpNonScheduled, Capacity: 1, ChamberCount: 1, Manufacturer: "Local", ModelName: "Bench", SerialNo: "EN-001", Location: "Lab"},
 	}
 	for _, tool := range tools {
 		row := tool
-		if err := db.Where(model.EqpEquipment{EquipmentCode: tool.EquipmentCode}).FirstOrCreate(&row).Error; err != nil {
+		if err := db.Where(model.EqpEquipment{EquipmentCode: tool.EquipmentCode}).Attrs(tool).FirstOrCreate(&row).Error; err != nil {
 			return err
 		}
+	}
+	if err := seedEquipmentExtras(db); err != nil {
+		return err
 	}
 	var count int64
 	if err := db.Model(&model.WipWorkOrder{}).Where("order_no = ?", "DEMO-WIP").Count(&count).Error; err != nil {
@@ -259,10 +266,153 @@ func seedShopfloor(db *gorm.DB, productID, versionID uint64) error {
 	if err := db.Where("equipment_code = ?", "WET-01").First(&wet).Error; err != nil {
 		return err
 	}
-	return db.Create(&model.WipMove{
+	if err := db.Create(&model.WipMove{
 		LotID: running.ID, NodeKey: "clean", EquipmentID: wet.ID, OperatorID: 1, QtyIn: 2, State: model.MoveOpen,
 		TrackInAt: &trackIn, QueueSeconds: int(trackIn.Sub(arrived).Seconds()), FromNodeKey: "clean",
+	}).Error; err != nil {
+		return err
+	}
+	if err := db.Model(&wet).Updates(map[string]any{"status": model.EqpProductive, "resume_state": model.EqpStandby}).Error; err != nil {
+		return err
+	}
+	if err := db.Model(&model.EqpStateLog{}).Where("equipment_id = ? AND ended_at IS NULL", wet.ID).
+		Updates(map[string]any{"ended_at": trackIn, "duration_seconds": int(trackIn.Sub(arrived).Seconds())}).Error; err != nil {
+		return err
+	}
+	return db.Create(&model.EqpStateLog{
+		EquipmentID: wet.ID, FromState: model.EqpStandby, ToState: model.EqpProductive, ReasonCode: "PROD_START",
+		OperatorID: 1, StartedAt: trackIn,
 	}).Error
+}
+
+func seedEquipmentExtras(db *gorm.DB) error {
+	if err := db.Model(&model.EqpEquipment{}).Where("status = ?", model.EqpIdle).Update("status", model.EqpStandby).Error; err != nil {
+		return err
+	}
+	if err := db.Model(&model.EqpEquipment{}).Where("status = ?", model.EqpDown).Update("status", model.EqpUnscheduledDown).Error; err != nil {
+		return err
+	}
+	if err := db.Model(&model.EqpEquipment{}).Where("capacity = 0").Update("capacity", 1).Error; err != nil {
+		return err
+	}
+	var tools []model.EqpEquipment
+	if err := db.Find(&tools).Error; err != nil {
+		return err
+	}
+	now := time.Now()
+	for _, tool := range tools {
+		var logs int64
+		if err := db.Model(&model.EqpStateLog{}).Where("equipment_id = ?", tool.ID).Count(&logs).Error; err != nil {
+			return err
+		}
+		if logs == 0 {
+			started := now.Add(-48 * time.Hour)
+			if err := db.Create(&model.EqpStateLog{
+				EquipmentID: tool.ID, FromState: "", ToState: tool.Status, ReasonCode: "SHIFT_START", StartedAt: started,
+			}).Error; err != nil {
+				return err
+			}
+		}
+	}
+	var plans int64
+	if err := db.Model(&model.EqpPmPlan{}).Count(&plans).Error; err != nil {
+		return err
+	}
+	if plans == 0 {
+		var photo, etch model.EqpEquipment
+		_ = db.Where("equipment_code = ?", "PHOTO-01").First(&photo).Error
+		_ = db.Where("equipment_code = ?", "ETCH-01").First(&etch).Error
+		soon := now.Add(10 * 24 * time.Hour)
+		overdue := now.Add(-24 * time.Hour)
+		var eng model.EqpEquipment
+		_ = db.Where("equipment_code = ?", "ENG-01").First(&eng).Error
+		rows := []model.EqpPmPlan{
+			{EquipmentID: photo.ID, EquipmentGroup: "PHOTO", PlanName: "光刻灯管检查", TriggerType: model.PmTime, IntervalDays: 30, ChecklistJSON: `["灯管外观","能量均匀性","颗粒"]`, Enabled: true, NextDueAt: &soon},
+			{EquipmentID: etch.ID, EquipmentGroup: "ETCH", PlanName: "刻蚀腔体清洁", TriggerType: model.PmTime, IntervalDays: 7, ChecklistJSON: `["腔体开盖","部件更换","漏率"]`, Enabled: true, BlockTrackIn: true, NextDueAt: &overdue},
+			{EquipmentGroup: "WET", PlanName: "清洗槽换液", TriggerType: model.PmCount, IntervalCount: 40, ChecklistJSON: `["药液浓度","温度"]`, Enabled: true},
+			{EquipmentID: eng.ID, EquipmentGroup: "ENG", PlanName: "工程台点检", TriggerType: model.PmTime, IntervalDays: 14, ChecklistJSON: `["接地","照明"]`, Enabled: true, NextDueAt: &overdue},
+		}
+		if err := db.Create(&rows).Error; err != nil {
+			return err
+		}
+	}
+	if err := seedCapabilities(db); err != nil {
+		return err
+	}
+	if err := dao.EnsurePmTasks(db); err != nil {
+		return err
+	}
+	var etch model.EqpEquipment
+	if err := db.Where("equipment_code = ?", "ETCH-01").First(&etch).Error; err != nil {
+		return nil
+	}
+	if etch.Status == model.EqpStandby {
+		var task model.EqpPmTask
+		err := db.Where("equipment_id = ? AND status IN ?", etch.ID, []string{model.PmDue, model.PmOverdue}).Order("id").First(&task).Error
+		if err == nil {
+			if _, err := dao.StartPm(db, task.ID, 1); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func seedCapabilities(db *gorm.DB) error {
+	recipes := []struct{ op, code, name string }{
+		{"CLEAN", "RCP-CLEAN", "SC1 清洗"},
+		{"PHOTO", "RCP-PHOTO", "i-line 曝光"},
+		{"INSPECT", "RCP-INSPECT", "CD 量测"},
+		{"ETCH", "RCP-ETCH", "多晶硅刻蚀"},
+	}
+	recipeID := map[string]uint64{}
+	for _, item := range recipes {
+		var op model.BaseOperation
+		if err := db.Where("operation_code = ?", item.op).First(&op).Error; err != nil {
+			continue
+		}
+		row := model.BaseRecipe{}
+		err := db.Where("recipe_code = ?", item.code).Attrs(model.BaseRecipe{
+			OperationID: int(op.ID), RecipeCode: item.code, RecipeName: item.name, Version: "1",
+			IsDefault: 1, Status: 1, Parameters: "{}",
+		}).FirstOrCreate(&row).Error
+		if err != nil {
+			return err
+		}
+		recipeID[item.op] = row.ID
+	}
+	// WET-01 / PHOTO-01 / METRO-01 stay group-only. Tests track those tools with a second
+	// released graph whose operation ids differ from the CMOS seed.
+	links := []struct{ eqp, op string }{
+		{"PHOTO-09", "PHOTO"},
+		{"ETCH-01", "ETCH"},
+		{"ENG-01", "ENG_REVIEW"},
+	}
+	for _, link := range links {
+		var eqp model.EqpEquipment
+		if err := db.Where("equipment_code = ?", link.eqp).First(&eqp).Error; err != nil {
+			continue
+		}
+		var n int64
+		if err := db.Model(&model.EqpCapability{}).Where("equipment_id = ?", eqp.ID).Count(&n).Error; err != nil {
+			return err
+		}
+		if n > 0 {
+			continue
+		}
+		var op model.BaseOperation
+		if err := db.Where("operation_code = ?", link.op).First(&op).Error; err != nil {
+			continue
+		}
+		cap := model.EqpCapability{EquipmentID: eqp.ID, OperationID: op.ID}
+		if link.op == "ETCH" {
+			cap.RecipeID = recipeID["ETCH"]
+		}
+		if err := db.Create(&cap).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func isBaseMenu(menu model.SysMenu) bool {
@@ -392,6 +542,16 @@ func defaultMenus() []model.SysMenu {
 		{413, 401, 3, "route.wip_move", "wip:move:track", "", "", "", "", 1},
 		{500, 0, 1, "route.equipment", "equipment", "equipment", "/equipment", "layout.base", "mdi:wrench", 7},
 		{501, 500, 2, "route.equipment_list", "eqp:equipment:query", "equipment_list", "/equipment/list", "view.equipment_list", "mdi:format-list-bulleted", 1},
+		{502, 500, 2, "route.equipment_detail", "eqp:equipment:query", "equipment_detail", "/equipment/detail/:id", "view.equipment_detail", "mdi:information-outline", 2},
+		{503, 501, 3, "route.equipment_list", "eqp:equipment:add", "", "", "", "", 1},
+		{504, 501, 3, "route.equipment_list", "eqp:equipment:edit", "", "", "", "", 2},
+		{505, 501, 3, "route.equipment_list", "eqp:equipment:delete", "", "", "", "", 3},
+		{510, 500, 2, "route.equipment_board", "eqp:equipment:query", "equipment_board", "/equipment/board", "view.equipment_board", "mdi:view-dashboard-variant", 3},
+		{511, 500, 2, "route.equipment_pm-plan", "eqp:pm:query", "equipment_pm-plan", "/equipment/pm-plan", "view.equipment_pm-plan", "mdi:calendar-check", 4},
+		{512, 500, 2, "route.equipment_pm-task", "eqp:pm:query", "equipment_pm-task", "/equipment/pm-task", "view.equipment_pm-task", "mdi:clipboard-list-outline", 5},
+		{513, 511, 3, "route.equipment_pm-plan", "eqp:pm:add", "", "", "", "", 1},
+		{514, 511, 3, "route.equipment_pm-plan", "eqp:pm:edit", "", "", "", "", 2},
+		{515, 511, 3, "route.equipment_pm-plan", "eqp:pm:delete", "", "", "", "", 3},
 		{600, 0, 1, "route.quality", "quality", "quality", "/quality", "layout.base", "mdi:clipboard-check", 8},
 		{601, 600, 2, "route.quality_inspection", "qc:inspection:query", "quality_inspection", "/quality/inspection", "view.quality_inspection", "mdi:magnify", 1},
 	}

@@ -230,7 +230,7 @@ func buildRoutes(menus []model.SysMenu, parentID int) []elegantRoute {
 				"order":   menu.SortOrder,
 			},
 		}
-		if menu.RouteName == "lot_detail" {
+		if menu.RouteName == "lot_detail" || menu.RouteName == "equipment_detail" {
 			node.Meta["hideInMenu"] = true
 		}
 		children := buildRoutes(menus, int(menu.ID))
