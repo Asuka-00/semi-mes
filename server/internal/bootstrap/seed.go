@@ -42,6 +42,10 @@ func Seed(db *gorm.DB) error {
 		&model.BaseRouteVersion{},
 		&model.BaseRouteNode{},
 		&model.BaseRouteEdge{},
+		&model.WipWorkOrder{},
+		&model.WipLot{},
+		&model.WipLotHistory{},
+		&model.WipLotLink{},
 	); err != nil {
 		return err
 	}
@@ -51,6 +55,9 @@ func Seed(db *gorm.DB) error {
 		return err
 	}
 	if count > 0 {
+		if err := ensureMenus(db); err != nil {
+			return err
+		}
 		return seedSampleRoute(db)
 	}
 
@@ -101,6 +108,36 @@ func Seed(db *gorm.DB) error {
 		return err
 	}
 	return seedSampleRoute(db)
+}
+
+// ensureMenus inserts menu rows added after the first seed and grants them to the matching roles.
+func ensureMenus(db *gorm.DB) error {
+	for _, menu := range defaultMenus() {
+		var count int64
+		if err := db.Model(&model.SysMenu{}).Where("id = ?", menu.ID).Count(&count).Error; err != nil {
+			return err
+		}
+		if count > 0 {
+			continue
+		}
+		if err := db.Create(&menu).Error; err != nil {
+			return err
+		}
+		links := []model.SysRoleMenu{{RoleID: 1, MenuID: int(menu.ID)}}
+		if isViewerMenu(menu) {
+			links = append(links, model.SysRoleMenu{RoleID: 4, MenuID: int(menu.ID)})
+		}
+		if isOperatorMenu(menu) {
+			links = append(links, model.SysRoleMenu{RoleID: 3, MenuID: int(menu.ID)})
+		}
+		if isSysAdminMenu(menu) {
+			links = append(links, model.SysRoleMenu{RoleID: 2, MenuID: int(menu.ID)})
+		}
+		if err := db.Create(&links).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func seedSampleRoute(db *gorm.DB) error {
@@ -162,15 +199,26 @@ func isBaseMenu(menu model.SysMenu) bool {
 	return hasPrefix(menu.PermissionCode, "base:")
 }
 
+func isWipMenu(menu model.SysMenu) bool {
+	if menu.RouteName == "work-order" || menu.RouteName == "lot" || hasPrefix(menu.RouteName, "work-order_") || hasPrefix(menu.RouteName, "lot_") {
+		return true
+	}
+	return hasPrefix(menu.PermissionCode, "wo:") || hasPrefix(menu.PermissionCode, "lot:")
+}
+
+func isModuleMenu(menu model.SysMenu) bool {
+	return isBaseMenu(menu) || isWipMenu(menu)
+}
+
 func isViewerMenu(menu model.SysMenu) bool {
-	if !isBaseMenu(menu) {
+	if !isModuleMenu(menu) {
 		return false
 	}
 	return menu.MenuType != 3 || hasSuffix(menu.PermissionCode, ":query")
 }
 
 func isOperatorMenu(menu model.SysMenu) bool {
-	if !isBaseMenu(menu) {
+	if !isModuleMenu(menu) {
 		return false
 	}
 	return menu.MenuType != 3 || !hasSuffix(menu.PermissionCode, ":delete")
@@ -246,9 +294,17 @@ func defaultMenus() []model.SysMenu {
 		{135, 131, 3, "route.base-data_recipe", "base:recipe:delete", "", "", "", "", 4},
 
 		{200, 0, 1, "route.work-order", "workOrder", "work-order", "/work-order", "layout.base", "mdi:clipboard-text", 4},
-		{201, 200, 2, "route.work-order_list", "wo:order:query", "work-order_list", "/work-order/list", "view.work-order_list", "mdi:format-list-bulleted", 1},
+		{201, 200, 2, "route.work-order_list", "wo:order", "work-order_list", "/work-order/list", "view.work-order_list", "mdi:format-list-bulleted", 1},
+		{202, 201, 3, "route.work-order_list", "wo:order:query", "", "", "", "", 1},
+		{203, 201, 3, "route.work-order_list", "wo:order:add", "", "", "", "", 2},
+		{204, 201, 3, "route.work-order_list", "wo:order:edit", "", "", "", "", 3},
+		{205, 201, 3, "route.work-order_list", "wo:order:delete", "", "", "", "", 4},
 		{300, 0, 1, "route.lot", "lot", "lot", "/lot", "layout.base", "mdi:package-variant", 5},
-		{301, 300, 2, "route.lot_list", "lot:lot:query", "lot_list", "/lot/list", "view.lot_list", "mdi:format-list-bulleted", 1},
+		{301, 300, 2, "route.lot_list", "lot:lot", "lot_list", "/lot/list", "view.lot_list", "mdi:format-list-bulleted", 1},
+		{302, 300, 2, "route.lot_detail", "lot:lot:query", "lot_detail", "/lot/detail/:id", "view.lot_detail", "mdi:package-variant-closed", 2},
+		{303, 301, 3, "route.lot_list", "lot:lot:query", "", "", "", "", 1},
+		{304, 301, 3, "route.lot_list", "lot:lot:add", "", "", "", "", 2},
+		{305, 301, 3, "route.lot_list", "lot:lot:edit", "", "", "", "", 3},
 		{400, 0, 1, "route.wip", "wip", "wip", "/wip", "layout.base", "mdi:transit-connection-variant", 6},
 		{401, 400, 2, "route.wip_move", "wip:move:query", "wip_move", "/wip/move", "view.wip_move", "mdi:transfer", 1},
 		{500, 0, 1, "route.equipment", "equipment", "equipment", "/equipment", "layout.base", "mdi:wrench", 7},

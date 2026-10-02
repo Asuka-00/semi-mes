@@ -25,6 +25,8 @@ var resources = []resource{
 	{"/api/v1/baseProcessRoute", "base:route"},
 	{"/api/v1/baseOperation", "base:operation"},
 	{"/api/v1/baseRecipe", "base:recipe"},
+	{"/api/v1/wipWorkOrder", "wo:order"},
+	{"/api/v1/wipLot", "lot:lot"},
 	{"/api/v1/sysUserRole", "system:user"},
 	{"/api/v1/sysUser", "system:user"},
 	{"/api/v1/sysRoleMenu", "system:role"},
@@ -78,9 +80,13 @@ func permissionCode(method, fullPath string) string {
 				return item.perm + ":edit"
 			}
 			switch {
-			case strings.HasSuffix(fullPath, "/resolve"), strings.HasSuffix(fullPath, "/validate"):
+			case strings.HasSuffix(fullPath, "/resolve"), strings.HasSuffix(fullPath, "/validate"), strings.HasSuffix(fullPath, "/releasedVersions"):
 				return item.perm + ":query"
-			case strings.HasSuffix(fullPath, "/release"), strings.HasSuffix(fullPath, "/graph"):
+			case strings.HasSuffix(fullPath, "/release"), strings.HasSuffix(fullPath, "/graph"),
+				strings.HasSuffix(fullPath, "/start"), strings.HasSuffix(fullPath, "/close"),
+				strings.HasSuffix(fullPath, "/hold"), strings.HasSuffix(fullPath, "/releaseHold"),
+				strings.HasSuffix(fullPath, "/split"), strings.HasSuffix(fullPath, "/advance"),
+				strings.HasSuffix(fullPath, "/merge"):
 				return item.perm + ":edit"
 			case strings.HasSuffix(fullPath, "/versions") && method == http.MethodPost:
 				return item.perm + ":add"
