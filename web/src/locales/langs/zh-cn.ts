@@ -254,7 +254,11 @@ const local: App.I18n.Schema = {
     'equipment_pm-plan': 'PM 计划',
     'equipment_pm-task': 'PM 任务',
     quality: '质量',
-    quality_inspection: '检验记录'
+    quality_inspection: '量测录入',
+    quality_plan: '检验计划',
+    quality_defect: '缺陷',
+    quality_pareto: '缺陷柏拉图',
+    quality_spc: 'SPC'
   },
   page: {
     login: {
@@ -663,6 +667,44 @@ const local: App.I18n.Schema = {
         task_cancelled: '已取消',
         pass: '通过',
         fail: '不通过'
+      },
+      qc: {
+        measure: '量测录入',
+        plan: '检验计划',
+        defect: '缺陷记录',
+        pareto: '缺陷柏拉图',
+        spc: '控制图',
+        param: '参数',
+        paramName: '参数名称',
+        unit: '单位',
+        target: '目标值',
+        sample: '样本数',
+        required: '必填',
+        enabled: '启用',
+        yes: '是',
+        no: '否',
+        operation: '工序',
+        product: '产品（0 表示全部）',
+        latest: '最近判定',
+        judgement: '判定',
+        noPlan: '当前工序没有检验计划',
+        code: '缺陷代码',
+        name: '名称',
+        category: '类别',
+        severity: '严重度',
+        disposition: '处置',
+        useAsIs: '特采',
+        rework: '返工',
+        scrap: '报废',
+        hold: '扣留',
+        addCode: '新增缺陷代码',
+        lotId: '批次 ID',
+        saved: '已保存',
+        reaction: '失控反应',
+        kind: '类型',
+        rule: '规则',
+        value: '值',
+        useJudgement: '采用量测判定'
       }
     }
   },

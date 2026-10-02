@@ -53,6 +53,15 @@ func Seed(db *gorm.DB) error {
 		&model.EqpPmPlan{},
 		&model.EqpPmTask{},
 		&model.WipMove{},
+		&model.QcInspectPlan{},
+		&model.QcInspectItem{},
+		&model.QcMeasurement{},
+		&model.QcJudgement{},
+		&model.QcDefectCode{},
+		&model.QcDefect{},
+		&model.QcSpcPolicy{},
+		&model.QcSpcLimit{},
+		&model.QcSpcEvent{},
 	); err != nil {
 		return err
 	}
@@ -119,6 +128,8 @@ func Seed(db *gorm.DB) error {
 
 // ensureMenus inserts menu rows added after the first seed and grants them to the matching roles.
 func ensureMenus(db *gorm.DB) error {
+	_ = db.Model(&model.SysMenu{}).Where("id = ? AND permission_code = ?", 601, "qc:inspection:query").
+		Update("permission_code", "qc:measure:query").Error
 	for _, menu := range defaultMenus() {
 		var count int64
 		if err := db.Model(&model.SysMenu{}).Where("id = ?", menu.ID).Count(&count).Error; err != nil {
@@ -233,7 +244,7 @@ func seedShopfloor(db *gorm.DB, productID, versionID uint64) error {
 		return err
 	}
 	if count > 0 {
-		return nil
+		return seedQuality(db, productID)
 	}
 	now := time.Now()
 	arrived := now.Add(-2 * time.Hour)
@@ -279,10 +290,13 @@ func seedShopfloor(db *gorm.DB, productID, versionID uint64) error {
 		Updates(map[string]any{"ended_at": trackIn, "duration_seconds": int(trackIn.Sub(arrived).Seconds())}).Error; err != nil {
 		return err
 	}
-	return db.Create(&model.EqpStateLog{
+	if err := db.Create(&model.EqpStateLog{
 		EquipmentID: wet.ID, FromState: model.EqpStandby, ToState: model.EqpProductive, ReasonCode: "PROD_START",
 		OperatorID: 1, StartedAt: trackIn,
-	}).Error
+	}).Error; err != nil {
+		return err
+	}
+	return seedQuality(db, productID)
 }
 
 func seedEquipmentExtras(db *gorm.DB) error {
@@ -381,10 +395,11 @@ func seedCapabilities(db *gorm.DB) error {
 		}
 		recipeID[item.op] = row.ID
 	}
-	// WET-01 / PHOTO-01 / METRO-01 stay group-only. Tests track those tools with a second
-	// released graph whose operation ids differ from the CMOS seed.
 	links := []struct{ eqp, op string }{
+		{"WET-01", "CLEAN"},
+		{"PHOTO-01", "PHOTO"},
 		{"PHOTO-09", "PHOTO"},
+		{"METRO-01", "INSPECT"},
 		{"ETCH-01", "ETCH"},
 		{"ENG-01", "ENG_REVIEW"},
 	}
@@ -415,6 +430,113 @@ func seedCapabilities(db *gorm.DB) error {
 	return nil
 }
 
+func seedQuality(db *gorm.DB, productID uint64) error {
+	var inspect model.BaseOperation
+	if err := db.Where("operation_code = ?", "INSPECT").First(&inspect).Error; err != nil {
+		return nil
+	}
+	var plans int64
+	if err := db.Model(&model.QcInspectPlan{}).Count(&plans).Error; err != nil {
+		return err
+	}
+	if plans == 0 {
+		target, lsl, usl := 500.0, 470.0, 530.0
+		if _, err := dao.SaveInspectPlan(db, 0, dao.PlanInput{
+			OperationID: inspect.ID, PlanName: "线宽 CD", Enabled: true,
+			Items: []dao.ItemInput{{
+				ParamCode: "CD", ParamName: "关键尺寸", Unit: "nm",
+				Target: &target, LSL: &lsl, USL: &usl, SampleSize: 1, Required: true,
+			}},
+		}); err != nil {
+			return err
+		}
+	}
+	for _, item := range []struct{ code, name, cat, sev string }{
+		{"PARTICLE", "颗粒", "particle", "major"},
+		{"SCRATCH", "划伤", "scratch", "critical"},
+		{"PATTERN", "图形异常", "pattern", "minor"},
+	} {
+		var n int64
+		if err := db.Model(&model.QcDefectCode{}).Where("defect_code = ?", item.code).Count(&n).Error; err != nil {
+			return err
+		}
+		if n == 0 {
+			if _, err := dao.SaveDefectCode(db, 0, item.code, item.name, item.cat, item.sev, 1); err != nil {
+				return err
+			}
+		}
+	}
+	var policies int64
+	if err := db.Model(&model.QcSpcPolicy{}).Where("param_code = ? AND operation_id = ?", "CD", inspect.ID).Count(&policies).Error; err != nil {
+		return err
+	}
+	if policies == 0 {
+		if _, err := dao.SaveSpcPolicy(db, model.QcSpcPolicy{
+			ParamCode: "CD", OperationID: inspect.ID, OnOOC: model.ReactHold, OnOOS: model.ReactHold,
+		}); err != nil {
+			return err
+		}
+	}
+	center, lcl, ucl := 500.0, 480.0, 520.0
+	if _, err := dao.SaveSpcLimit(db, model.QcSpcLimit{
+		ParamCode: "CD", OperationID: inspect.ID, ChartType: "imr", Center: &center, LCL: &lcl, UCL: &ucl, UseManual: true,
+	}); err != nil {
+		return err
+	}
+	var measured int64
+	if err := db.Model(&model.QcMeasurement{}).Count(&measured).Error; err != nil {
+		return err
+	}
+	if measured > 0 {
+		return nil
+	}
+	var order model.WipWorkOrder
+	if err := db.Where("order_no = ?", "DEMO-WIP").First(&order).Error; err != nil {
+		return nil
+	}
+	now := time.Now()
+	lot := model.WipLot{
+		LotNo: "DEMO-QC", OrderID: order.ID, ProductID: productID, RouteVersionID: order.RouteVersionID,
+		CurrentNodeKey: "inspect", Quantity: 6, Priority: 3, LotType: model.LotTypeProduction,
+		Status: model.LotWaiting, ReworkJSON: "{}", ArrivedAt: &now,
+	}
+	if err := db.Create(&lot).Error; err != nil {
+		return err
+	}
+	var metro model.EqpEquipment
+	_ = db.Where("equipment_code = ?", "METRO-01").First(&metro).Error
+	values := []float64{498, 502, 501, 499, 503, 497, 500, 504, 496, 501, 499, 620}
+	base := now.Add(-time.Duration(len(values)) * time.Hour)
+	for i, value := range values {
+		if _, err := dao.RecordMeasurements(db, dao.MeasureInput{
+			LotID: lot.ID, EquipmentID: metro.ID, OperationID: inspect.ID, OperatorID: 1,
+			Samples: []dao.SampleInput{{ParamCode: "CD", Values: []float64{value}}},
+		}); err != nil {
+			return err
+		}
+		var last model.QcMeasurement
+		if err := db.Where("lot_id = ?", lot.ID).Order("id desc").First(&last).Error; err == nil {
+			_ = db.Model(&last).Update("measured_at", base.Add(time.Duration(i)*time.Hour)).Error
+		}
+	}
+	var demo model.WipLot
+	if err := db.Where("lot_no = ?", "DEMO-WIP-001").First(&demo).Error; err != nil {
+		return nil
+	}
+	for _, item := range []struct {
+		code string
+		qty  int
+	}{{"PARTICLE", 12}, {"SCRATCH", 5}, {"PATTERN", 2}} {
+		if _, err := dao.RecordDefect(db, dao.DefectInput{
+			LotID: demo.ID, EquipmentID: metro.ID, OperationID: inspect.ID, NodeKey: "photo",
+			DefectCode: item.code, Quantity: item.qty, Disposition: model.DispositionUseAsIs, Note: "演示", OperatorID: 1,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func isBaseMenu(menu model.SysMenu) bool {
 	if menu.RouteName == "home" || menu.RouteName == "base-data" || hasPrefix(menu.RouteName, "base-data_") {
 		return true
@@ -436,8 +558,15 @@ func isWipMenu(menu model.SysMenu) bool {
 	return hasPrefix(menu.PermissionCode, "wo:") || hasPrefix(menu.PermissionCode, "lot:")
 }
 
+func isQualityMenu(menu model.SysMenu) bool {
+	if menu.RouteName == "quality" || hasPrefix(menu.RouteName, "quality_") {
+		return true
+	}
+	return hasPrefix(menu.PermissionCode, "qc:")
+}
+
 func isModuleMenu(menu model.SysMenu) bool {
-	return isBaseMenu(menu) || isWipMenu(menu)
+	return isBaseMenu(menu) || isWipMenu(menu) || isQualityMenu(menu)
 }
 
 func isViewerMenu(menu model.SysMenu) bool {
@@ -553,7 +682,17 @@ func defaultMenus() []model.SysMenu {
 		{514, 511, 3, "route.equipment_pm-plan", "eqp:pm:edit", "", "", "", "", 2},
 		{515, 511, 3, "route.equipment_pm-plan", "eqp:pm:delete", "", "", "", "", 3},
 		{600, 0, 1, "route.quality", "quality", "quality", "/quality", "layout.base", "mdi:clipboard-check", 8},
-		{601, 600, 2, "route.quality_inspection", "qc:inspection:query", "quality_inspection", "/quality/inspection", "view.quality_inspection", "mdi:magnify", 1},
+		{601, 600, 2, "route.quality_inspection", "qc:measure:query", "quality_inspection", "/quality/inspection", "view.quality_inspection", "mdi:magnify", 1},
+		{602, 601, 3, "route.quality_inspection", "qc:measure:add", "", "", "", "", 1},
+		{603, 600, 2, "route.quality_plan", "qc:plan:query", "quality_plan", "/quality/plan", "view.quality_plan", "mdi:clipboard-list", 2},
+		{604, 603, 3, "route.quality_plan", "qc:plan:add", "", "", "", "", 1},
+		{605, 603, 3, "route.quality_plan", "qc:plan:edit", "", "", "", "", 2},
+		{606, 603, 3, "route.quality_plan", "qc:plan:delete", "", "", "", "", 3},
+		{610, 600, 2, "route.quality_defect", "qc:defect:query", "quality_defect", "/quality/defect", "view.quality_defect", "mdi:alert-circle-outline", 3},
+		{611, 610, 3, "route.quality_defect", "qc:defect:add", "", "", "", "", 1},
+		{620, 600, 2, "route.quality_pareto", "qc:defect:query", "quality_pareto", "/quality/pareto", "view.quality_pareto", "mdi:chart-bar", 4},
+		{630, 600, 2, "route.quality_spc", "qc:spc:query", "quality_spc", "/quality/spc", "view.quality_spc", "mdi:chart-bell-curve", 5},
+		{631, 630, 3, "route.quality_spc", "qc:spc:edit", "", "", "", "", 1},
 	}
 	menus := make([]model.SysMenu, 0, len(raw))
 	for _, item := range raw {

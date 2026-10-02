@@ -20,8 +20,7 @@ func TestTrackInOut(t *testing.T) {
 		t.Fatalf("missing tools: %+v", tools)
 	}
 
-	_, versions := doJSON(http.MethodGet, "/api/v1/wipWorkOrder/releasedVersions", token, nil)
-	version := versions["data"].(map[string]any)["versions"].([]any)[0].(map[string]any)
+	version := releasedCMOS(t, token)
 	orderID := createEntity(t, token, "/api/v1/wipWorkOrder", map[string]any{
 		"orderNo": "WO-TRACK", "productID": uint64(version["productID"].(float64)),
 		"routeVersionID": uint64(version["versionID"].(float64)), "plannedQty": 20, "priority": 2,
@@ -84,20 +83,20 @@ func TestTrackInOut(t *testing.T) {
 		if in["code"] != float64(0) {
 			t.Fatalf("track in %s: %+v", group, in)
 		}
-		_, done := doJSON(http.MethodPost, "/api/v1/wipMove/trackOut", token, map[string]any{"lotId": lotID, "qtyOut": 8})
+		body := map[string]any{"lotId": lotID, "qtyOut": 8}
+		if code == "METRO-01" {
+			body["measurements"] = []map[string]any{{"paramCode": "CD", "values": []float64{500}}}
+		}
+		_, done := doJSON(http.MethodPost, "/api/v1/wipMove/trackOut", token, body)
 		if done["code"] != float64(0) {
 			t.Fatalf("track out %s: %+v", group, done)
 		}
 	}
 	step("PHOTO", "PHOTO-01")
 	step("METRO", "METRO-01")
-	_, missing := doJSON(http.MethodPost, "/api/v1/wipMove/pass", token, map[string]any{"lotId": lotID})
-	if missing["code"] == float64(0) {
-		t.Fatalf("decide without inspection: %+v", missing)
-	}
-	_, rework := doJSON(http.MethodPost, "/api/v1/wipMove/pass", token, map[string]any{"lotId": lotID, "inspectionResult": "fail"})
-	if rework["code"] != float64(0) || rework["data"].(map[string]any)["lot"].(map[string]any)["currentNodeKey"] != "photo" {
-		t.Fatalf("rework: %+v", rework)
+	_, decided := doJSON(http.MethodPost, "/api/v1/wipMove/pass", token, map[string]any{"lotId": lotID})
+	if decided["code"] != float64(0) || decided["data"].(map[string]any)["lot"].(map[string]any)["currentNodeKey"] != "etch" {
+		t.Fatalf("pass judgement should etch: %+v", decided)
 	}
 
 	_, heldLot := doJSON(http.MethodPost, "/api/v1/wipLot/"+lotIDStr+"/hold", token, map[string]any{"reasonCode": "QA", "reason": "check"})

@@ -92,7 +92,7 @@ func Test_baseRecipeHandler_Create(t *testing.T) {
 	h.MockDao.SQLMock.ExpectBegin()
 	args := h.MockDao.GetAnyArgs(h.TestData)
 	h.MockDao.SQLMock.ExpectExec("INSERT INTO .*").
-		WithArgs(args[:len(args)-1]...). // adjusted for the amount of test data
+		WithArgs(args[:len(args)-2]...). // drop id and the extra reflected DeletedAt field
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	h.MockDao.SQLMock.ExpectCommit()
 
@@ -110,12 +110,11 @@ func Test_baseRecipeHandler_DeleteByID(t *testing.T) {
 	h := newBaseRecipeHandler()
 	defer h.Close()
 	testData := h.TestData.(*model.BaseRecipe)
-	expectedSQLForDeletion := "DELETE .*"
-	
+	expectedSQLForDeletion := "UPDATE .*"
 
 	h.MockDao.SQLMock.ExpectBegin()
 	h.MockDao.SQLMock.ExpectExec(expectedSQLForDeletion).
-		WithArgs(testData.ID). // adjusted for the amount of test data
+		WithArgs(h.MockDao.AnyTime, testData.ID).
 		WillReturnResult(sqlmock.NewResult(int64(testData.ID), 1))
 	h.MockDao.SQLMock.ExpectCommit()
 

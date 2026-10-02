@@ -136,7 +136,11 @@ func TestTrackOutReworkLimitHold(t *testing.T) {
 		if in["code"] != float64(0) {
 			t.Fatalf("track in %s: %+v", code, in)
 		}
-		_, out := doJSON(http.MethodPost, "/api/v1/wipMove/trackOut", token, map[string]any{"lotId": lotID, "qtyOut": 4})
+		body := map[string]any{"lotId": lotID, "qtyOut": 4}
+		if code == "METRO-01" {
+			body["measurements"] = []map[string]any{{"paramCode": "CD", "values": []float64{500}}}
+		}
+		_, out := doJSON(http.MethodPost, "/api/v1/wipMove/trackOut", token, body)
 		if out["code"] != float64(0) {
 			t.Fatalf("track out %s: %+v", code, out)
 		}
@@ -167,8 +171,7 @@ func TestTrackOutReworkLimitHold(t *testing.T) {
 
 func startCleanLot(t *testing.T, token, orderNo string) (uint64, string) {
 	t.Helper()
-	_, versions := doJSON(http.MethodGet, "/api/v1/wipWorkOrder/releasedVersions", token, nil)
-	version := versions["data"].(map[string]any)["versions"].([]any)[0].(map[string]any)
+	version := releasedCMOS(t, token)
 	orderID := createEntity(t, token, "/api/v1/wipWorkOrder", map[string]any{
 		"orderNo": orderNo, "productID": uint64(version["productID"].(float64)),
 		"routeVersionID": uint64(version["versionID"].(float64)), "plannedQty": 20, "priority": 2,
@@ -184,4 +187,56 @@ func startCleanLot(t *testing.T, token, orderNo string) (uint64, string) {
 		t.Fatalf("pass start: %+v", passed)
 	}
 	return lotID, fmt.Sprint(orderNo)
+}
+
+func releasedCMOS(t *testing.T, token string) map[string]any {
+	t.Helper()
+	_, versions := doJSON(http.MethodGet, "/api/v1/wipWorkOrder/releasedVersions", token, nil)
+	if versions["code"] != float64(0) {
+		t.Fatalf("versions: %+v", versions)
+	}
+	for _, raw := range versions["data"].(map[string]any)["versions"].([]any) {
+		item := raw.(map[string]any)
+		if item["routeCode"] == "ROUTE-CMOS" {
+			return item
+		}
+	}
+	t.Fatal("ROUTE-CMOS missing")
+	return nil
+}
+
+func TestPmReturnsToEngineering(t *testing.T) {
+	token := login(t, "admin", "admin123")
+	id := createEntity(t, token, "/api/v1/eqpEquipment", map[string]any{
+		"equipmentCode": "EQP-PM-ENG", "equipmentName": "工程保养台", "equipmentGroup": "ENG", "equipmentType": "ENG",
+		"status": "engineering", "capacity": 1, "chamberCount": 1,
+	})
+	due := time.Now().Add(-time.Hour).Format("2006-01-02")
+	_, plan := doJSON(http.MethodPost, "/api/v1/eqpPmPlan", token, map[string]any{
+		"equipmentID": mustNum(id), "planName": "工程台保养", "triggerType": "time", "intervalDays": 7,
+		"checklist": []string{"点检"}, "nextDueAt": due, "enabled": true,
+	})
+	if plan["code"] != float64(0) {
+		t.Fatalf("plan: %+v", plan)
+	}
+	_, tasks := doJSON(http.MethodPost, "/api/v1/eqpPmTask/list", token, map[string]any{"equipmentID": mustNum(id), "limit": 10})
+	list := tasks["data"].(map[string]any)["tasks"].([]any)
+	if len(list) == 0 {
+		t.Fatalf("tasks: %+v", tasks)
+	}
+	taskID := toID(list[0].(map[string]any)["id"])
+	_, started := doJSON(http.MethodPost, "/api/v1/eqpPmTask/"+taskID+"/start", token, map[string]any{})
+	if started["code"] != float64(0) {
+		t.Fatalf("start: %+v", started)
+	}
+	_, done := doJSON(http.MethodPost, "/api/v1/eqpPmTask/"+taskID+"/complete", token, map[string]any{
+		"result": "pass", "items": []map[string]any{{"name": "点检", "result": "pass"}},
+	})
+	if done["code"] != float64(0) {
+		t.Fatalf("complete: %+v", done)
+	}
+	_, ready := doJSON(http.MethodGet, "/api/v1/eqpEquipment/"+id, token, nil)
+	if ready["data"].(map[string]any)["equipment"].(map[string]any)["status"] != "engineering" {
+		t.Fatalf("expected engineering: %+v", ready["data"].(map[string]any)["equipment"])
+	}
 }

@@ -31,6 +31,7 @@ type TrackOutInput struct {
 	InspectionResult string
 	InspectionGrade  string
 	DefectCode       string
+	Measurements     []SampleInput
 	OperatorID       uint64
 }
 
@@ -63,6 +64,8 @@ type StationView struct {
 	OperationID        uint64               `json:"operationID"`
 	RecipeID           uint64               `json:"recipeID"`
 	InspectionRequired bool                 `json:"inspectionRequired"`
+	InspectPlan        *PlanView            `json:"inspectPlan"`
+	LatestResult       string               `json:"latestResult"`
 	OpenMove           *model.WipMove       `json:"openMove"`
 	Equipment          []model.EqpEquipment `json:"equipment"`
 }
@@ -129,6 +132,18 @@ func GetStation(db *gorm.DB, lotNo string) (*StationView, error) {
 	if view.Equipment == nil {
 		view.Equipment = []model.EqpEquipment{}
 	}
+	if node.OperationID != 0 {
+		plan, err := FindInspectPlan(db, node.OperationID, lot.ProductID)
+		if err != nil {
+			return nil, err
+		}
+		view.InspectPlan = plan
+	}
+	judged, err := LatestJudgement(db, lot.ID)
+	if err != nil {
+		return nil, err
+	}
+	view.LatestResult = judged
 	open, err := openMove(db, lot.ID)
 	if err != nil {
 		return nil, err
@@ -270,6 +285,24 @@ func TrackOut(db *gorm.DB, in TrackOutInput) (*model.WipLot, routegraph.Result, 
 		if err != nil {
 			return err
 		}
+		node, ok := findNode(graph, row.CurrentNodeKey)
+		if !ok {
+			return ErrWipVersion
+		}
+		plan, err := FindInspectPlan(tx, node.OperationID, row.ProductID)
+		if err != nil {
+			return err
+		}
+		if plan != nil {
+			judged, err := recordMeasurementsTx(tx, MeasureInput{
+				LotID: row.ID, MoveID: move.ID, EquipmentID: move.EquipmentID, OperationID: node.OperationID,
+				OperatorID: in.OperatorID, Samples: in.Measurements,
+			})
+			if err != nil {
+				return err
+			}
+			in.InspectionResult = judged
+		}
 		if inspectionRequired(graph, row.CurrentNodeKey) && strings.TrimSpace(in.InspectionResult) == "" {
 			return ErrWipInspect
 		}
@@ -345,6 +378,15 @@ func PassNode(db *gorm.DB, in PassInput) (*model.WipLot, routegraph.Result, erro
 		node, ok := findNode(graph, row.CurrentNodeKey)
 		if !ok || node.Type == routegraph.NodeOperation || node.Type == routegraph.NodeEnd {
 			return ErrWipTrack
+		}
+		if strings.TrimSpace(in.InspectionResult) == "" {
+			judged, err := LatestJudgement(tx, row.ID)
+			if err != nil {
+				return err
+			}
+			if judged != "" {
+				in.InspectionResult = judged
+			}
 		}
 		if inspectionRequired(graph, node.Key) && strings.TrimSpace(in.InspectionResult) == "" {
 			return ErrWipInspect
