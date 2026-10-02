@@ -204,7 +204,7 @@ onUnmounted(() => {
         <NGi span="24 s:24 m:14">
           <NCard :title="$t('page.home.dash.holds')" :bordered="false" size="small" class="card-wrapper">
             <template #header-extra>
-              <NButton v-if="hasAuth('wip:move:query')" text type="primary" @click="router.push({ name: 'wip_overview' })">
+              <NButton text type="primary" @click="router.push({ name: 'wip_overview' })">
                 {{ $t('page.home.dash.openOverview') }}
               </NButton>
             </template>
@@ -241,7 +241,7 @@ onUnmounted(() => {
       <NGi span="24 s:24 m:12">
         <NCard :title="$t('page.home.dash.equipment')" :bordered="false" size="small" class="card-wrapper">
           <template v-if="board?.equipment" #header-extra>
-            <NButton v-if="hasAuth('eqp:equipment:query')" text type="primary" @click="router.push({ name: 'equipment_board' })">
+            <NButton text type="primary" @click="router.push({ name: 'equipment_board' })">
               {{ $t('page.home.dash.openBoard') }}
             </NButton>
           </template>
