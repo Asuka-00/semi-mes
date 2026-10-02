@@ -59,16 +59,16 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <NPopover trigger="click" placement="bottom-end" :width="360" @update:show="show => show && load()">
+  <NPopover trigger="click" placement="bottom-end" :width="380" @update:show="show => show && load()">
     <template #trigger>
       <NBadge :value="unread" :max="99" :show="unread > 0">
         <ButtonIcon icon="mdi:bell-outline" :tooltip-content="$t('notice.title')" />
       </NBadge>
     </template>
-    <div class="max-h-420px overflow-auto">
-      <div class="mb-8px flex-y-center justify-between">
-        <span class="font-600">{{ $t('notice.title') }}</span>
-        <NButton text type="primary" size="small" :disabled="unread === 0" @click="readAll">
+    <div class="max-h-420px overflow-y-auto">
+      <div class="mb-8px flex items-center justify-between gap-12px">
+        <span class="shrink-0 font-600">{{ $t('notice.title') }}</span>
+        <NButton text type="primary" size="small" class="shrink-0" :disabled="unread === 0" @click="readAll">
           {{ $t('notice.markAll') }}
         </NButton>
       </div>
