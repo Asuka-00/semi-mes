@@ -29,6 +29,7 @@ export const views: Record<LastLevelRouteKey, RouteComponent | (() => Promise<Ro
   "base-data_workshop": () => import("@/views/base-data/workshop/index.vue"),
   equipment_list: () => import("@/views/equipment/list/index.vue"),
   home: () => import("@/views/home/index.vue"),
+  lot_detail: () => import("@/views/lot/detail/[id].vue"),
   lot_list: () => import("@/views/lot/list/index.vue"),
   quality_inspection: () => import("@/views/quality/inspection/index.vue"),
   system_menu: () => import("@/views/system/menu/index.vue"),

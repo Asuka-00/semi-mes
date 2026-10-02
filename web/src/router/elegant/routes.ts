@@ -179,6 +179,17 @@ export const generatedRoutes: GeneratedRoute[] = [
     },
     children: [
       {
+        name: 'lot_detail',
+        path: '/lot/detail/:id',
+        component: 'view.lot_detail',
+        props: true,
+        meta: {
+          title: 'lot_detail',
+          i18nKey: 'route.lot_detail',
+          hideInMenu: true
+        }
+      },
+      {
         name: 'lot_list',
         path: '/lot/list',
         component: 'view.lot_list',

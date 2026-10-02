@@ -305,47 +305,64 @@ flowchart LR
 
 ### 3.3 模块2：工单和批次管理 (Work Order & Lot Management)
 
-模块 2 落地时，批次绑定 `route_version_id` 和 `current_node_key`，位置不再用 `current_operation_id`。下一步调用 3.2.8 的 Resolve。下面的表是实现前的草稿，工单与 Lot 的实现会改写本节。
+批次绑定已发布的 `route_version_id` 和 `current_node_key`。开批时当前节点是该版本的开始节点。离开当前节点时调用 3.2.8 的 Resolve，不在页面里另写一套分支规则。完整的 Track In / Track Out 仍属于后面的 WIP 模块；这里的「推进」是留给 WIP 的插口：传入检验上下文，写入履历，并按 Resolve 的结果移动、Hold 或完成。
+
+工单状态：`created` → `released` → `in_progress` → `completed` → `closed`。只有 `created` 能改产品、路线版本和数量。下达后才能开批。第一批开出后进入 `in_progress`。已投放数量达到计划数量，且没有处于 waiting 或 hold 的批次时，工单变为 `completed`，之后才能关闭。
+
+批次号为 `{工单号}-{三位序号}`，序号记在工单上，拆批也继续使用。批次状态：`waiting`、`hold`、`completed`、`merged`。
 
 #### 3.3.1 工单表 (wip_work_order)
 
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
-| id | bigint | 主键ID |
-| order_no | varchar(50) | 工单号，唯一 |
-| product_id | bigint | 产品ID |
-| route_id | bigint | 工艺路线ID |
+| id | bigint | 主键 |
+| order_no | varchar(40) | 工单号，唯一 |
+| product_id | bigint | 产品 |
+| route_version_id | bigint | 已发布的工艺路线版本 |
 | planned_qty | int | 计划数量 |
 | released_qty | int | 已投放数量 |
 | completed_qty | int | 已完成数量 |
-| priority | tinyint | 优先级：1-低，2-中，3-高，4-紧急 |
-| planned_start_date | date | 计划开始日期 |
-| planned_end_date | date | 计划完成日期 |
-| actual_start_date | timestamp | 实际开始时间 |
-| actual_end_date | timestamp | 实际完成时间 |
-| status | varchar(20) | 状态：CREATED, RELEASED, IN_PROGRESS, COMPLETED, CLOSED |
-| created_at | timestamp | 创建时间 |
-| updated_at | timestamp | 更新时间 |
-| deleted_at | timestamp | 软删除时间 |
+| next_lot_seq | int | 下一个批次序号 |
+| priority | int | 1 低，2 中，3 高，4 紧急 |
+| due_date | date | 交期 |
+| status | varchar(20) | created / released / in_progress / completed / closed |
+| note | text | 备注 |
+| deleted_at | timestamp | 软删除 |
 
 #### 3.3.2 批次表 (wip_lot)
 
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
-| id | bigint | 主键ID |
+| id | bigint | 主键 |
 | lot_no | varchar(50) | 批次号，唯一 |
-| order_id | bigint | 工单ID |
-| parent_lot_id | bigint | 父批次ID（拆分/合并时使用） |
-| product_id | bigint | 产品ID |
-| route_id | bigint | 工艺路线ID |
-| current_operation_id | bigint | 当前工序ID |
+| order_id | bigint | 工单 |
+| product_id | bigint | 产品 |
+| route_version_id | bigint | 绑定的路线版本，开批后不变 |
+| current_node_key | varchar(64) | 当前节点 |
 | quantity | int | 当前数量 |
-| hold_flag | tinyint | Hold标志：1-Hold，0-正常 |
-| hold_reason | varchar(255) | Hold原因 |
-| status | varchar(20) | 状态：CREATED, WIP, HOLD, COMPLETED, SCRAPPED |
-| created_at | timestamp | 创建时间 |
-| updated_at | timestamp | 更新时间 |
-| deleted_at | timestamp | 软删除时间 |
+| priority | int | 开批时从工单复制 |
+| lot_type | varchar(20) | production 或 engineering，供 Resolve 使用 |
+| status | varchar(20) | waiting / hold / completed / merged |
+| hold_reason_code | varchar(50) | Hold 原因代码 |
+| hold_reason | varchar(255) | Hold 说明 |
+| rework_json | text | 各返工边已走过的次数，Resolve 读取 |
+| deleted_at | timestamp | 软删除 |
+
+#### 3.3.3 履历 (wip_lot_history)
+
+记录 start、advance、hold、release、split、merge、complete。字段包含 from/to 节点、边、原因代码、数量和关联批次。这张表是 WIP Track In/Out 之前的履历，不替代以后的 `wip_move_history`。
+
+#### 3.3.4 谱系 (wip_lot_link)
+
+| 字段名 | 说明 |
+|--------|------|
+| parent_lot_id / child_lot_id | 拆批时母批是 parent；合批时被并入的批次是 parent，留下的批次是 child |
+| link_type | split 或 merge |
+| quantity | 这次拆出或并入的数量 |
+
+拆批只允许 waiting，子批数量之和必须小于母批，母批留下余数，子批停在同一节点并复制返工次数。合批要求同一工单、同一路线版本、同一当前节点，且都是 waiting。被并入的批次状态改为 merged，数量归零。
+
+返工次数达到上限时，Resolve 返回 Hold，批次停在当前节点，原因代码 `REWORK_LIMIT`。解除 Hold 只恢复 waiting，不移动节点。
 
 ### 3.4 模块3：WIP跟踪 (WIP Tracking)
 
@@ -442,7 +459,10 @@ flowchart LR
 
 [wip_work_order] 1---N [wip_lot]
 [base_product] 1---N [wip_work_order]
-[base_process_route] 1---N [wip_work_order]
+[base_route_version] 1---N [wip_work_order]
+[base_route_version] 1---N [wip_lot]
+[wip_lot] 1---N [wip_lot_history]
+[wip_lot] 1---N [wip_lot_link]
 [wip_lot] 1---N [wip_move_history]
 
 [base_production_line] 1---N [eqp_equipment]
@@ -539,6 +559,19 @@ flowchart LR
 - `POST .../validate`、`POST .../release`
 - `POST .../resolve` 给定当前节点和批次上下文，返回下一步
 - `/api/v1/baseRecipe`
+
+#### 4.4.4 工单与批次（模块2）
+
+权限前缀是 `wo:order` 和 `lot:lot`，仍按查询、新增、编辑、删除拆按钮。开批、Hold、解除 Hold、拆批、合批、推进都要编辑权限。
+
+- `POST /api/v1/wipWorkOrder/list`，列表键 `wipWorkOrders`
+- `GET /api/v1/wipWorkOrder/releasedVersions` 已发布且可绑定的路线版本
+- `POST|PUT|DELETE /api/v1/wipWorkOrder` 与 `/:id`
+- `POST /api/v1/wipWorkOrder/:id/release`、`/close`、`/start`。开批体为 `{quantity, lotType}`
+- `POST /api/v1/wipLot/list`，列表键 `wipLots`
+- `GET /api/v1/wipLot/:id` 返回批次、履历、谱系和流程图节点边
+- `POST /api/v1/wipLot/:id/hold`、`/releaseHold`、`/split`、`/advance`
+- `POST /api/v1/wipLot/merge`，体为 `{targetId, sourceIds}`。推进体为 `{inspectionResult, inspectionGrade, defectCode}`，批次类型、优先级、产品和返工次数由服务端从批次本身填入 Resolve
 
 ## 5. 国际化方案 (i18n Approach)
 
@@ -800,10 +833,18 @@ docker-compose up -d
       ├── 新增 (base:recipe:add)
       ├── 编辑 (base:recipe:edit)
       └── 删除 (base:recipe:delete)
-工单管理 (workOrder) - 待实现
-  └── 工单列表 (wo:order:query)
-批次管理 (lot) - 待实现
-  └── 批次列表 (lot:lot:query)
+工单管理 (workOrder)
+  └── 工单列表 (wo:order)
+      ├── 查询 (wo:order:query)
+      ├── 新增 (wo:order:add)
+      ├── 编辑 (wo:order:edit)
+      └── 删除 (wo:order:delete)
+批次管理 (lot)
+  ├── 批次列表 (lot:lot)
+  │   ├── 查询 (lot:lot:query)
+  │   ├── 新增 (lot:lot:add)
+  │   └── 编辑 (lot:lot:edit)
+  └── 批次详情 (lot_detail，菜单隐藏)
 WIP跟踪 (wip) - 待实现
   └── 流转记录 (wip:move:query)
 设备管理 (equipment) - 待实现
@@ -842,11 +883,13 @@ WIP跟踪 (wip) - 待实现
 - ✅ RBAC系统
 - ✅ 模块1：基础数据建模
 
-### 阶段2：工单和批次管理
-- 工单CRUD
-- 批次投放
-- 批次拆分/合并
-- Hold/Release功能
+### 阶段2：工单和批次管理（本次完成到可开批、拆合批和按路线推进）
+- ✅ 工单创建、下达、关闭
+- ✅ 按 `{工单号}-{序号}` 开批，绑定已发布路线版本和开始节点
+- ✅ 拆批、合批和谱系
+- ✅ Hold / 解除 Hold
+- ✅ 用 Resolve 推进，并在批次详情里标出当前位置
+- 未做：完整 Track In / Track Out、设备、不良录入页面。推进接口就是后续 WIP 的插口
 
 ### 阶段3：WIP跟踪
 - Track In/Track Out

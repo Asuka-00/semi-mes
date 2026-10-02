@@ -34,6 +34,7 @@ declare module "@elegant-router/types" {
     "iframe-page": "/iframe-page/:url";
     "login": "/login/:module(pwd-login|code-login|register|reset-pwd|bind-wechat)?";
     "lot": "/lot";
+    "lot_detail": "/lot/detail/:id";
     "lot_list": "/lot/list";
     "quality": "/quality";
     "quality_inspection": "/quality/inspection";
@@ -119,6 +120,7 @@ declare module "@elegant-router/types" {
     | "base-data_workshop"
     | "equipment_list"
     | "home"
+    | "lot_detail"
     | "lot_list"
     | "quality_inspection"
     | "system_menu"
