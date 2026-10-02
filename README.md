@@ -16,7 +16,7 @@
 ## 环境
 
 - Go 1.24（`CGO_ENABLED=0`）
-- Node.js 22 与 pnpm 9
+- Node.js 22 与 pnpm 10（`web/package.json` 要求 pnpm >= 10.5.0）
 - 可选：MySQL 8 或 PostgreSQL 16
 
 ## 启动
