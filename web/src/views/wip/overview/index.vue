@@ -12,11 +12,13 @@ const byNode = ref<Array<{ key: string; count: number; qty: number }>>([]);
 const byProduct = ref<Array<{ key: string; count: number; qty: number }>>([]);
 const holds = ref<Array<Record<string, any>>>([]);
 
-const countColumns: DataTableColumns<{ key: string; count: number; qty: number }> = [
-  { title: $t('page.mes.wip.status'), key: 'key' },
-  { title: $t('page.mes.track.count'), key: 'count', width: 100 },
-  { title: $t('page.mes.track.qty'), key: 'qty', width: 100 }
-];
+function countColumns(title: string): DataTableColumns<{ key: string; count: number; qty: number }> {
+  return [
+    { title, key: 'key', ellipsis: { tooltip: true } },
+    { title: $t('page.mes.track.count'), key: 'count', width: 72 },
+    { title: $t('page.mes.track.qty'), key: 'qty', width: 72 }
+  ];
+}
 
 const holdColumns: DataTableColumns<Record<string, any>> = [
   { title: $t('page.mes.wip.lotNo'), key: 'lotNo' },
@@ -45,20 +47,20 @@ onMounted(async () => {
 
 <template>
   <div class="flex flex-col gap-12px">
-    <NGrid :cols="3" :x-gap="12">
+    <NGrid cols="1 s:1 m:3" responsive="screen" :x-gap="12" :y-gap="12">
       <NGi>
         <NCard :title="$t('page.mes.track.byStatus')" size="small">
-          <NDataTable :columns="countColumns" :data="byStatus" size="small" />
+          <NDataTable :columns="countColumns($t('page.mes.wip.status'))" :data="byStatus" size="small" />
         </NCard>
       </NGi>
       <NGi>
         <NCard :title="$t('page.mes.track.byNode')" size="small">
-          <NDataTable :columns="countColumns" :data="byNode" size="small" />
+          <NDataTable :columns="countColumns($t('page.mes.track.step'))" :data="byNode" size="small" />
         </NCard>
       </NGi>
       <NGi>
         <NCard :title="$t('page.mes.track.byProduct')" size="small">
-          <NDataTable :columns="countColumns" :data="byProduct" size="small" />
+          <NDataTable :columns="countColumns($t('page.mes.wip.product'))" :data="byProduct" size="small" />
         </NCard>
       </NGi>
     </NGrid>

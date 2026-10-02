@@ -51,6 +51,7 @@ onMounted(load);
       :loading="loading"
       :columns="columns"
       :data="rows"
+      :scroll-x="1280"
       :pagination="{ page, pageSize: 10, itemCount: total, onUpdatePage: (next: number) => { page = next; load(); } }"
     />
   </NCard>

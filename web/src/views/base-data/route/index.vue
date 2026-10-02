@@ -347,7 +347,10 @@ const flowWrap = ref<HTMLElement | null>(null);
 let flowObserver: ResizeObserver | null = null;
 
 function fitGraph() {
-  fitView({ padding: 0.18, duration: 200 });
+  nextTick(() => {
+    fitView({ padding: 0.2, duration: 180 });
+    window.setTimeout(() => fitView({ padding: 0.2, duration: 180 }), 60);
+  });
 }
 
 function addNode(type: string, position?: { x: number; y: number }) {
@@ -1049,10 +1052,11 @@ onUnmounted(() => flowObserver?.disconnect());
 .flow-wrap {
   flex: 1;
   min-width: 0;
-  height: calc(100vh - 220px);
-  min-height: 360px;
+  height: min(560px, calc(100vh - 180px));
+  min-height: 420px;
   border: 1px solid var(--n-border-color, #e5e7eb);
   border-radius: 8px;
+  overflow: hidden;
 }
 
 .flow-wrap :deep(.vue-flow) {
