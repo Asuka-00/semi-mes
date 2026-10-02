@@ -251,7 +251,10 @@ func seedShopfloor(db *gorm.DB, productID, versionID uint64) error {
 		return err
 	}
 	if count > 0 {
-		return seedQuality(db, productID)
+		if err := seedQuality(db, productID); err != nil {
+			return err
+		}
+		return seedDashboard(db, productID, versionID)
 	}
 	now := time.Now()
 	arrived := now.Add(-2 * time.Hour)
@@ -303,7 +306,113 @@ func seedShopfloor(db *gorm.DB, productID, versionID uint64) error {
 	}).Error; err != nil {
 		return err
 	}
-	return seedQuality(db, productID)
+	if err := seedQuality(db, productID); err != nil {
+		return err
+	}
+	return seedDashboard(db, productID, versionID)
+}
+
+// seedDashboard adds lots, holds, and a week of track-outs so the home board is not empty.
+// It is skipped once DEMO-DASH-DONE exists.
+func seedDashboard(db *gorm.DB, productID, versionID uint64) error {
+	var exists int64
+	if err := db.Model(&model.WipLot{}).Where("lot_no = ?", "DEMO-DASH-DONE").Count(&exists).Error; err != nil {
+		return err
+	}
+	if exists > 0 {
+		return nil
+	}
+	var order model.WipWorkOrder
+	if err := db.Where("order_no = ?", "DEMO-WIP").First(&order).Error; err != nil {
+		return nil
+	}
+	now := time.Now()
+	held := now.Add(-8 * time.Hour)
+	olderHold := now.Add(-3 * time.Hour)
+	sensor := model.BaseProduct{ProductCode: "SENSOR-DEMO", ProductName: "Sensor Demo", ProductType: "IC", Version: "A", Status: 1}
+	if err := db.Where(model.BaseProduct{ProductCode: "SENSOR-DEMO"}).FirstOrCreate(&sensor).Error; err != nil {
+		return err
+	}
+	arrived := now.Add(-90 * time.Minute)
+	lots := []model.WipLot{
+		{LotNo: "DEMO-DASH-ETCH", OrderID: order.ID, ProductID: productID, RouteVersionID: versionID, CurrentNodeKey: "etch", Quantity: 15, Priority: 3, LotType: model.LotTypeProduction, Status: model.LotWaiting, ReworkJSON: "{}", ArrivedAt: &arrived},
+		{LotNo: "DEMO-DASH-HOLD", OrderID: order.ID, ProductID: productID, RouteVersionID: versionID, CurrentNodeKey: "etch", Quantity: 8, Priority: 2, LotType: model.LotTypeProduction, Status: model.LotHold, HoldReasonCode: "YIELD", HoldReason: "良率偏低，等待复测", ReworkJSON: "{}", ArrivedAt: &held},
+		{LotNo: "DEMO-SENSOR", OrderID: order.ID, ProductID: sensor.ID, RouteVersionID: versionID, CurrentNodeKey: "photo", Quantity: 9, Priority: 4, LotType: model.LotTypeEngineering, Status: model.LotWaiting, ReworkJSON: "{}", ArrivedAt: &arrived},
+		{LotNo: "DEMO-DASH-DONE", OrderID: order.ID, ProductID: productID, RouteVersionID: versionID, CurrentNodeKey: "end_main", Quantity: 25, Priority: 3, LotType: model.LotTypeProduction, Status: model.LotCompleted, ReworkJSON: "{}", ArrivedAt: &held},
+	}
+	for i := range lots {
+		if err := db.Create(&lots[i]).Error; err != nil {
+			return err
+		}
+	}
+	var holdLot, doneLot model.WipLot
+	if err := db.Where("lot_no = ?", "DEMO-DASH-HOLD").First(&holdLot).Error; err != nil {
+		return err
+	}
+	if err := db.Where("lot_no = ?", "DEMO-DASH-DONE").First(&doneLot).Error; err != nil {
+		return err
+	}
+	if err := db.Create(&model.WipLotHistory{
+		LotID: holdLot.ID, EventType: model.EventHold, FromNodeKey: "etch", ToNodeKey: "etch",
+		ReasonCode: "YIELD", Reason: "良率偏低，等待复测", Quantity: 8, CreatedAt: &held,
+	}).Error; err != nil {
+		return err
+	}
+	var demoHold model.WipLot
+	if err := db.Where("lot_no = ?", "DEMO-WIP-002").First(&demoHold).Error; err == nil {
+		var n int64
+		if err := db.Model(&model.WipLotHistory{}).Where("lot_id = ? AND event_type = ?", demoHold.ID, model.EventHold).Count(&n).Error; err != nil {
+			return err
+		}
+		if n == 0 {
+			if err := db.Create(&model.WipLotHistory{
+				LotID: demoHold.ID, EventType: model.EventHold, FromNodeKey: "inspect", ToNodeKey: "inspect",
+				ReasonCode: demoHold.HoldReasonCode, Reason: demoHold.HoldReason, Quantity: demoHold.Quantity, CreatedAt: &olderHold,
+			}).Error; err != nil {
+				return err
+			}
+		}
+	}
+	doneAt := now.Add(-2 * time.Hour)
+	if err := db.Create(&model.WipLotHistory{
+		LotID: doneLot.ID, EventType: model.EventComplete, FromNodeKey: "etch", ToNodeKey: "end_main",
+		Quantity: 25, CreatedAt: &doneAt,
+	}).Error; err != nil {
+		return err
+	}
+	if err := db.Create(&model.WipLotHistory{
+		LotID: doneLot.ID, EventType: model.EventTrackOut, FromNodeKey: "etch", ToNodeKey: "end_main",
+		Quantity: 25, CreatedAt: &doneAt,
+	}).Error; err != nil {
+		return err
+	}
+	var photo model.EqpEquipment
+	_ = db.Where("equipment_code = ?", "PHOTO-01").First(&photo).Error
+	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	counts := []int{3, 5, 4, 7, 6, 8, 4}
+	for i, n := range counts {
+		at := start.AddDate(0, 0, -6+i).Add(12 * time.Hour)
+		for j := 0; j < n; j++ {
+			out := at.Add(time.Duration(j) * time.Minute)
+			in := out.Add(-30 * time.Minute)
+			scrap := 0
+			if i == 5 && j == 0 {
+				scrap = 1
+			}
+			if i == 6 && j == 0 {
+				scrap = 2
+			}
+			move := model.WipMove{
+				LotID: doneLot.ID, NodeKey: "photo", EquipmentID: photo.ID, OperatorID: 1,
+				QtyIn: 10, QtyOut: 10 - scrap, QtyScrap: scrap, State: model.MoveCompleted,
+				TrackInAt: &in, TrackOutAt: &out, FromNodeKey: "photo", ToNodeKey: "inspect",
+			}
+			if err := db.Create(&move).Error; err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func seedEquipmentExtras(db *gorm.DB) error {
