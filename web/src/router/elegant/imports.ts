@@ -36,5 +36,7 @@ export const views: Record<LastLevelRouteKey, RouteComponent | (() => Promise<Ro
   system_role: () => import("@/views/system/role/index.vue"),
   system_user: () => import("@/views/system/user/index.vue"),
   wip_move: () => import("@/views/wip/move/index.vue"),
+  wip_overview: () => import("@/views/wip/overview/index.vue"),
+  wip_station: () => import("@/views/wip/station/index.vue"),
   "work-order_list": () => import("@/views/work-order/list/index.vue"),
 };

@@ -44,6 +44,8 @@ declare module "@elegant-router/types" {
     "system_user": "/system/user";
     "wip": "/wip";
     "wip_move": "/wip/move";
+    "wip_overview": "/wip/overview";
+    "wip_station": "/wip/station";
     "work-order": "/work-order";
     "work-order_list": "/work-order/list";
   };
@@ -127,6 +129,8 @@ declare module "@elegant-router/types" {
     | "system_role"
     | "system_user"
     | "wip_move"
+    | "wip_overview"
+    | "wip_station"
     | "work-order_list"
   >;
 

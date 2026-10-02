@@ -281,8 +281,16 @@ func GetLot(c *gin.Context) {
 	if links == nil {
 		links = []dao.LotLinkView{}
 	}
+	moves, err := dao.ListMovesByLot(database.GetDB(), id)
+	if err != nil {
+		writeWipErr(c, err)
+		return
+	}
+	if moves == nil {
+		moves = []dao.MoveView{}
+	}
 	response.Success(c, gin.H{
-		"lot": lot, "history": history, "links": links,
+		"lot": lot, "history": history, "links": links, "moves": moves,
 		"nodes": nodesDTO(graph), "edges": edgesDTO(graph),
 	})
 }
@@ -393,6 +401,12 @@ func writeWipErr(c *gin.Context, err error) {
 		c.JSON(200, gin.H{"code": 40009, "msg": i18n.T(c, "error.wip.qty"), "data": struct{}{}})
 	case errors.Is(err, dao.ErrWipVersion):
 		c.JSON(200, gin.H{"code": 40009, "msg": i18n.T(c, "error.wip.version"), "data": struct{}{}})
+	case errors.Is(err, dao.ErrWipEquipment):
+		c.JSON(200, gin.H{"code": 40009, "msg": i18n.T(c, "error.wip.equipment"), "data": struct{}{}})
+	case errors.Is(err, dao.ErrWipInspect):
+		c.JSON(200, gin.H{"code": 40009, "msg": i18n.T(c, "error.wip.inspect"), "data": struct{}{}})
+	case errors.Is(err, dao.ErrWipTrack):
+		c.JSON(200, gin.H{"code": 40009, "msg": i18n.T(c, "error.wip.track"), "data": struct{}{}})
 	case errors.Is(err, routegraph.ErrNoPath):
 		c.JSON(200, gin.H{"code": 40009, "msg": i18n.T(c, "error.route.no_path"), "data": struct{}{}})
 	default:

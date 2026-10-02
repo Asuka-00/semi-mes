@@ -19,10 +19,11 @@ const route = useRoute();
 const router = useRouter();
 const { hasAuth } = useAuth();
 const canEdit = computed(() => hasAuth('lot:lot:edit'));
-const { fitView } = useVueFlow({ id: 'lot-detail' });
+const { fitView, setViewport } = useVueFlow('lot-detail');
 
 const lot = ref<Record<string, any> | null>(null);
 const history = ref<Array<Record<string, any>>>([]);
+const moves = ref<Array<Record<string, any>>>([]);
 const links = ref<Array<Record<string, any>>>([]);
 const nodes = ref<Array<Record<string, any>>>([]);
 const edges = ref<Array<Record<string, any>>>([]);
@@ -33,6 +34,38 @@ const reasonCode = ref('HOLD');
 const reason = ref('');
 
 const lotId = computed(() => Number(props.id || route.params.id));
+const lotFlow = ref<HTMLElement | null>(null);
+
+async function fitLot() {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const fitted = await fitView({ padding: 0.2, duration: 0 });
+    if (fitted) return;
+    await new Promise(resolve => window.setTimeout(resolve, 80));
+  }
+  const list = flowNodes.value;
+  const box = lotFlow.value;
+  if (!list.length || !box) return;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  list.forEach(node => {
+    minX = Math.min(minX, node.position.x);
+    minY = Math.min(minY, node.position.y);
+    maxX = Math.max(maxX, node.position.x + 140);
+    maxY = Math.max(maxY, node.position.y + 48);
+  });
+  const width = box.clientWidth || 640;
+  const height = box.clientHeight || 320;
+  const boundsW = Math.max(1, maxX - minX);
+  const boundsH = Math.max(1, maxY - minY);
+  const zoom = Math.min((width * 0.84) / boundsW, (height * 0.84) / boundsH, 1.25);
+  await setViewport({
+    x: (width - boundsW * zoom) / 2 - minX * zoom,
+    y: (height - boundsH * zoom) / 2 - minY * zoom,
+    zoom
+  });
+}
 
 const flowNodes = computed(() =>
   nodes.value.map(node => ({
@@ -75,7 +108,12 @@ function eventLabel(event: string) {
     release: 'page.mes.wip.eventRelease',
     split: 'page.mes.wip.eventSplit',
     merge: 'page.mes.wip.eventMerge',
-    complete: 'page.mes.wip.eventComplete'
+    complete: 'page.mes.wip.eventComplete',
+    track_in: 'page.mes.wip.eventTrackIn',
+    track_out: 'page.mes.wip.eventTrackOut',
+    abort: 'page.mes.wip.eventAbort',
+    pass: 'page.mes.wip.eventPass',
+    scrap: 'page.mes.wip.eventScrap'
   };
   return $t((map[event] || 'page.mes.wip.event') as App.I18n.I18nKey);
 }
@@ -83,7 +121,9 @@ function eventLabel(event: string) {
 function statusLabel(status: string) {
   const map: Record<string, string> = {
     waiting: 'page.mes.wip.waiting',
+    running: 'page.mes.wip.running',
     hold: 'page.mes.wip.hold',
+    scrapped: 'page.mes.wip.scrapped',
     completed: 'page.mes.wip.completed',
     merged: 'page.mes.wip.merged'
   };
@@ -96,11 +136,12 @@ async function load() {
   if (error || !data) return;
   lot.value = data.lot;
   history.value = data.history || [];
+  moves.value = data.moves || [];
   links.value = data.links || [];
   nodes.value = data.nodes || [];
   edges.value = data.edges || [];
   await nextTick();
-  fitView({ padding: 0.2 });
+  await fitLot();
 }
 
 async function advance() {
@@ -164,13 +205,29 @@ watch(lotId, load);
       </NGi>
     </NGrid>
     <div class="mb-8px font-600">{{ $t('page.mes.wip.position') }}</div>
-    <div class="flow-wrap mb-16px">
-      <VueFlow id="lot-detail" :nodes="flowNodes" :edges="flowEdges" :nodes-draggable="false" :nodes-connectable="false" :edges-updatable="false" fit-view-on-init @nodes-initialized="fitView({ padding: 0.2 })">
+    <div ref="lotFlow" class="flow-wrap mb-16px">
+      <VueFlow id="lot-detail" :nodes="flowNodes" :edges="flowEdges" :nodes-draggable="false" :nodes-connectable="false" :edges-updatable="false" :min-zoom="0.1" :max-zoom="1.5" fit-view-on-init @nodes-initialized="fitLot">
         <Background />
         <Controls />
         <MiniMap />
       </VueFlow>
     </div>
+    <div class="mb-8px font-600">{{ $t('page.mes.wip.moves') }}</div>
+    <NDataTable
+      :columns="[
+        { title: $t('page.mes.track.step'), key: 'nodeName' },
+        { title: $t('page.mes.track.equipment'), key: 'equipmentCode' },
+        { title: $t('page.mes.track.operator'), key: 'operatorName' },
+        { title: $t('page.mes.track.qtyOut'), key: 'qtyOut' },
+        { title: $t('page.mes.track.qtyScrap'), key: 'qtyScrap' },
+        { title: $t('page.mes.track.queue'), key: 'queueSeconds' },
+        { title: $t('page.mes.track.process'), key: 'processSeconds' },
+        { title: $t('page.mes.track.state'), key: 'state' }
+      ]"
+      :data="moves"
+      size="small"
+      class="mb-16px"
+    />
     <div class="mb-8px font-600">{{ $t('page.mes.wip.history') }}</div>
     <NDataTable :columns="historyColumns" :data="history" size="small" class="mb-16px" />
     <div class="mb-8px font-600">{{ $t('page.mes.wip.genealogy') }}</div>
@@ -186,8 +243,15 @@ watch(lotId, load);
 
 <style scoped>
 .flow-wrap {
-  height: 420px;
+  height: min(420px, calc(100vh - 220px));
+  min-height: 280px;
   border: 1px solid var(--n-border-color);
   border-radius: 8px;
+  overflow: hidden;
+}
+
+.flow-wrap :deep(.vue-flow) {
+  width: 100%;
+  height: 100%;
 }
 </style>

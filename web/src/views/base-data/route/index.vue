@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import type { DataTableColumns, SelectOption } from 'naive-ui';
 import { Handle, MarkerType, Position, VueFlow, useVueFlow } from '@vue-flow/core';
 import type { Connection } from '@vue-flow/core';
@@ -81,7 +81,7 @@ interface FlowEdge {
 
 const { hasAuth } = useAuth();
 const { locale } = useI18n();
-const { screenToFlowCoordinate, fitView } = useVueFlow({ id: 'route-editor' });
+const { screenToFlowCoordinate, fitView, setViewport } = useVueFlow('route-editor');
 
 const canAdd = computed(() => hasAuth('base:route:add'));
 const canEdit = computed(() => hasAuth('base:route:edit'));
@@ -340,11 +340,45 @@ async function selectVersion(id: number) {
   });
   sim.node = nodes.value.find(node => node.data.nodeType === 'decision')?.id || nodes.value[0]?.id || '';
   await nextTick();
-  fitView({ padding: 0.16 });
+  await fitGraph();
 }
 
-function fitGraph() {
-  fitView({ padding: 0.16 });
+const flowWrap = ref<HTMLElement | null>(null);
+let flowObserver: ResizeObserver | null = null;
+
+async function fitGraph() {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const fitted = await fitView({ padding: 0.2, duration: 0 });
+    if (fitted) {
+      flowWrap.value?.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    await new Promise(resolve => window.setTimeout(resolve, 80));
+  }
+  const list = nodes.value;
+  const box = flowWrap.value;
+  if (!list.length || !box) return;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  list.forEach(node => {
+    minX = Math.min(minX, node.position.x);
+    minY = Math.min(minY, node.position.y);
+    maxX = Math.max(maxX, node.position.x + 168);
+    maxY = Math.max(maxY, node.position.y + 64);
+  });
+  const width = box.clientWidth || 640;
+  const height = box.clientHeight || 420;
+  const boundsW = Math.max(1, maxX - minX);
+  const boundsH = Math.max(1, maxY - minY);
+  const zoom = Math.min((width * 0.84) / boundsW, (height * 0.84) / boundsH, 1.25);
+  await setViewport({
+    x: (width - boundsW * zoom) / 2 - minX * zoom,
+    y: (height - boundsH * zoom) / 2 - minY * zoom,
+    zoom
+  });
+  box.scrollIntoView({ block: 'nearest' });
 }
 
 function addNode(type: string, position?: { x: number; y: number }) {
@@ -476,7 +510,7 @@ function autoLayout() {
     const pos = graph.node(node.id);
     return { ...node, position: { x: pos.x - 84, y: pos.y - 32 } };
   });
-  nextTick(() => fitView({ padding: 0.2 }));
+  nextTick(() => fitGraph());
 }
 
 async function createDraft(copyFrom?: number) {
@@ -644,7 +678,13 @@ onMounted(async () => {
   await loadMasters();
   const seeded = routes.value.find(item => item.routeCode === 'ROUTE-CMOS');
   if (seeded) await selectRoute(seeded.id);
+  if (flowWrap.value) {
+    flowObserver = new ResizeObserver(() => fitGraph());
+    flowObserver.observe(flowWrap.value);
+  }
 });
+
+onUnmounted(() => flowObserver?.disconnect());
 </script>
 
 <template>
@@ -740,7 +780,7 @@ onMounted(async () => {
           <div class="text-12px opacity-70">{{ $t('page.mes.routeGraph.dragHint') }}</div>
         </div>
 
-        <div class="flow-wrap" @drop="onDrop" @dragover.prevent>
+        <div ref="flowWrap" class="flow-wrap" @drop="onDrop" @dragover.prevent>
           <VueFlow
             id="route-editor"
             v-model:nodes="nodes"
@@ -748,6 +788,8 @@ onMounted(async () => {
             :nodes-draggable="editable"
             :nodes-connectable="editable"
             :elements-selectable="true"
+            :min-zoom="0.1"
+            :max-zoom="1.5"
             fit-view-on-init
             @nodes-initialized="fitGraph"
             @connect="onConnect"
@@ -1040,9 +1082,11 @@ onMounted(async () => {
 .flow-wrap {
   flex: 1;
   min-width: 0;
-  height: 480px;
+  height: min(560px, calc(100vh - 180px));
+  min-height: 420px;
   border: 1px solid var(--n-border-color, #e5e7eb);
   border-radius: 8px;
+  overflow: hidden;
 }
 
 .flow-wrap :deep(.vue-flow) {

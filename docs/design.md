@@ -305,11 +305,11 @@ flowchart LR
 
 ### 3.3 模块2：工单和批次管理 (Work Order & Lot Management)
 
-批次绑定已发布的 `route_version_id` 和 `current_node_key`。开批时当前节点是该版本的开始节点。离开当前节点时调用 3.2.8 的 Resolve，不在页面里另写一套分支规则。完整的 Track In / Track Out 仍属于后面的 WIP 模块；这里的「推进」是留给 WIP 的插口：传入检验上下文，写入履历，并按 Resolve 的结果移动、Hold 或完成。
+批次绑定已发布的 `route_version_id` 和 `current_node_key`。开批时当前节点是该版本的开始节点。离开节点时调用 3.2.8 的 Resolve。模块 3 的出站和「离开非加工节点」都走这个函数，不另写分支规则。原有的 `POST /wipLot/:id/advance` 仍是同一个插口，给还没进站的批次直接试算用。
 
-工单状态：`created` → `released` → `in_progress` → `completed` → `closed`。只有 `created` 能改产品、路线版本和数量。下达后才能开批。第一批开出后进入 `in_progress`。已投放数量达到计划数量，且没有处于 waiting 或 hold 的批次时，工单变为 `completed`，之后才能关闭。
+工单状态：`created` → `released` → `in_progress` → `completed` → `closed`。只有 `created` 能改产品、路线版本和数量。下达后才能开批。第一批开出后进入 `in_progress`。已投放数量达到计划数量，且没有处于 waiting、running 或 hold 的批次时，工单变为 `completed`，之后才能关闭。
 
-批次号为 `{工单号}-{三位序号}`，序号记在工单上，拆批也继续使用。批次状态：`waiting`、`hold`、`completed`、`merged`。
+批次号为 `{工单号}-{三位序号}`，序号记在工单上，拆批也继续使用。批次状态：`waiting`、`running`、`hold`、`completed`、`scrapped`、`merged`。
 
 #### 3.3.1 工单表 (wip_work_order)
 
@@ -342,7 +342,8 @@ flowchart LR
 | quantity | int | 当前数量 |
 | priority | int | 开批时从工单复制 |
 | lot_type | varchar(20) | production 或 engineering，供 Resolve 使用 |
-| status | varchar(20) | waiting / hold / completed / merged |
+| status | varchar(20) | waiting / running / hold / completed / scrapped / merged |
+| arrived_at | timestamp | 到达当前节点的时间，进站时用来算排队时间 |
 | hold_reason_code | varchar(50) | Hold 原因代码 |
 | hold_reason | varchar(255) | Hold 说明 |
 | rework_json | text | 各返工边已走过的次数，Resolve 读取 |
@@ -350,7 +351,7 @@ flowchart LR
 
 #### 3.3.3 履历 (wip_lot_history)
 
-记录 start、advance、hold、release、split、merge、complete。字段包含 from/to 节点、边、原因代码、数量和关联批次。这张表是 WIP Track In/Out 之前的履历，不替代以后的 `wip_move_history`。
+记录 start、advance、hold、release、split、merge、complete。字段包含 from/to 节点、边、原因代码、数量和关联批次。过站计时和数量记在 `wip_move`，不写回这张事件表。
 
 #### 3.3.4 谱系 (wip_lot_link)
 
@@ -366,24 +367,36 @@ flowchart LR
 
 ### 3.4 模块3：WIP跟踪 (WIP Tracking)
 
-#### 3.4.1 流转历史表 (wip_move_history)
+加工节点必须先 Track In 再 Track Out。开始节点和判定节点没有设备，用「离开节点」直接调用 Resolve。结束节点不再过站。
 
-| 字段名 | 类型 | 说明 |
-|--------|------|------|
-| id | bigint | 主键ID |
-| lot_id | bigint | 批次ID |
-| operation_id | bigint | 工序ID |
-| move_type | varchar(20) | 类型：TRACK_IN, TRACK_OUT |
-| equipment_id | bigint | 设备ID |
-| operator_id | bigint | 操作员ID |
-| quantity_in | int | 进站数量 |
-| quantity_out | int | 出站数量 |
-| move_time | timestamp | 流转时间 |
-| created_at | timestamp | 创建时间 |
+Track In 要求批次是 waiting、数量大于 0、不在 Hold，当前节点是工序，设备存在且不是 down，并且设备组与节点的 `equipment_group` 一致。节点没有设备组时，允许任意未停机设备。配方缺省用节点上的配方；如果另选配方，必须属于该工序。操作员取当前登录用户。排队时间是到达当前节点到进站的秒数。
+
+Track Out 要求批次是 running，并且有一条未关闭的进站记录。出站数量加报废数量必须等于进站数量。报废大于 0 时原因代码只能是 BROKEN、PARTICLE、SCRATCH、OTHER。出站数量为 0 时批次变为 scrapped，不再往下走。否则调用 Resolve：分支、返工、返工超限 Hold，或进入结束节点后 completed。加工时间是出站减进站。若离开的节点上有引用 `inspection.*` 或 `defect.*` 的非默认边，必须提交检验或量测结果。
+
+取消进站把未关闭的记录标为 aborted，批次回到 waiting，节点和数量不变。
+
+#### 3.4.1 过站记录 (wip_move)
+
+一条记录对应一次进站到出站、取消，或一次离开非加工节点。字段包括工序、设备、配方、操作员、进站/出站/报废数量、报废原因、检验结果、排队秒数、加工秒数、来源和目标节点、Resolve 的 action 和 reason。状态是 open、completed、aborted。
+
+批次详情和「流转记录」页都读这张表。在制总览按状态、节点、产品计数，并列出 Hold。
 
 ### 3.5 模块4：设备管理 (Equipment Management)
 
-#### 3.5.1 设备台账表 (eqp_equipment)
+模块 3 先落一张可被模块 4 直接加列的设备表 `eqp_equipment`：编码、名称、设备组、类型、状态（idle / down）、产线 ID、型号、厂商，以及软删除。Track In 只认设备组、状态不是 down、以及记录存在。模块 4 应在这张表上补状态履历和 PM，不要另建一张设备主表。下面的字段是模块 4 的目标，其中 PM 表尚未实现。
+
+#### 3.5.0 当前已落地的设备占位
+
+| 字段名 | 说明 |
+|--------|------|
+| equipment_code | 唯一编码 |
+| equipment_group | 与工艺节点的 equipment_group 对应，例如 PHOTO |
+| status | idle 可进站，down 拒绝进站 |
+| line_id | 先为 0，模块 4 再挂产线 |
+
+模块 4 的目标字段如下，当前表只实现了其中能支撑进站的部分。
+
+#### 3.5.1 设备台账目标 (eqp_equipment)
 
 | 字段名 | 类型 | 说明 |
 |--------|------|------|
@@ -572,6 +585,20 @@ flowchart LR
 - `GET /api/v1/wipLot/:id` 返回批次、履历、谱系和流程图节点边
 - `POST /api/v1/wipLot/:id/hold`、`/releaseHold`、`/split`、`/advance`
 - `POST /api/v1/wipLot/merge`，体为 `{targetId, sourceIds}`。推进体为 `{inspectionResult, inspectionGrade, defectCode}`，批次类型、优先级、产品和返工次数由服务端从批次本身填入 Resolve
+- `GET /api/v1/wipLot/:id` 同时返回 `moves`
+
+#### 4.4.5 过站（模块3）
+
+查询权限 `wip:move:query`，进站、出站、取消进站和离开节点要 `wip:move:track`。设备列表要 `eqp:equipment:query`。
+
+- `GET /api/v1/wipMove/station?lotNo=` 当前工序、是否需要检验、可进站设备、未关闭的进站
+- `POST /api/v1/wipMove/trackIn` `{lotId, equipmentId, recipeId}`
+- `POST /api/v1/wipMove/trackOut` `{lotId, qtyOut, qtyScrap, scrapReasonCode, inspectionResult, inspectionGrade, defectCode}`
+- `POST /api/v1/wipMove/abort` `{lotId, reason}`
+- `POST /api/v1/wipMove/pass` `{lotId, inspectionResult, inspectionGrade, defectCode}`
+- `POST /api/v1/wipMove/list` 列表键 `wipMoves`，可按 `lot_no` 筛选
+- `GET /api/v1/wipMove/overview`
+- `GET /api/v1/eqpEquipment`
 
 ## 5. 国际化方案 (i18n Approach)
 
@@ -845,9 +872,11 @@ docker-compose up -d
   │   ├── 新增 (lot:lot:add)
   │   └── 编辑 (lot:lot:edit)
   └── 批次详情 (lot_detail，菜单隐藏)
-WIP跟踪 (wip) - 待实现
+WIP跟踪 (wip)
+  ├── 过站工位 (wip:move:query，进站/出站按钮 wip:move:track)
+  ├── 在制总览 (wip:move:query)
   └── 流转记录 (wip:move:query)
-设备管理 (equipment) - 待实现
+设备管理 (equipment) - 占位台账，模块 4 扩展同一张表
   └── 设备台账 (eqp:equipment:query)
 质量管理 (quality) - 待实现
   └── 检验记录 (qc:inspection:query)
@@ -889,12 +918,16 @@ WIP跟踪 (wip) - 待实现
 - ✅ 拆批、合批和谱系
 - ✅ Hold / 解除 Hold
 - ✅ 用 Resolve 推进，并在批次详情里标出当前位置
-- 未做：完整 Track In / Track Out、设备、不良录入页面。推进接口就是后续 WIP 的插口
+- 未做：设备状态机和 PM。过站已经在阶段 3。
 
-### 阶段3：WIP跟踪
-- Track In/Track Out
-- 流转历史查询
-- 在制品报表
+### 阶段3：WIP跟踪（本次）
+- ✅ 加工节点 Track In / Track Out，开始和判定节点离开时直接 Resolve
+- ✅ 取消进站
+- ✅ 报废数量和原因；出站数量为 0 则报废且不再往下走
+- ✅ 过站履历含排队时间和加工时间
+- ✅ 过站工位、在制总览、流转记录
+- ✅ 设备占位表，按设备组限制进站
+- 未做：设备状态切换、PM、独立的量测录入页。检验结果在出站或离开判定节点时提交
 
 ### 阶段4：设备管理
 - 设备台账

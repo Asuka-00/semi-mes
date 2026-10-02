@@ -24,6 +24,9 @@ var zhCN = map[string]string{
 	"error.wip.bad_state":             "当前状态不允许这个操作",
 	"error.wip.qty":                   "数量不合法，或超过工单剩余数量",
 	"error.wip.version":               "只能绑定本产品已发布的工艺路线版本",
+	"error.wip.equipment":             "设备不存在、已停机，或不属于当前工序的设备组",
+	"error.wip.inspect":               "离开这个节点需要检验或量测结果",
+	"error.wip.track":                 "批次当前状态不能进站、出站或取消进站",
 }
 
 var enUS = map[string]string{
@@ -44,6 +47,9 @@ var enUS = map[string]string{
 	"error.wip.bad_state":             "This action is not allowed in the current status",
 	"error.wip.qty":                   "Quantity is invalid or exceeds the remaining order quantity",
 	"error.wip.version":               "Bind a released route version of this product",
+	"error.wip.equipment":             "Equipment is missing, down, or not in this step's equipment group",
+	"error.wip.inspect":               "This step requires an inspection or measurement result",
+	"error.wip.track":                 "The lot cannot track in, track out, or abort in its current status",
 }
 
 // T returns a message for the request language. Default is zh-CN.

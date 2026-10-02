@@ -15,8 +15,10 @@ const (
 	OrderClosed     = "closed"
 
 	LotWaiting   = "waiting"
+	LotRunning   = "running"
 	LotHold      = "hold"
 	LotCompleted = "completed"
+	LotScrapped  = "scrapped"
 	LotMerged    = "merged"
 
 	LotTypeProduction  = "production"
@@ -32,6 +34,18 @@ const (
 	EventSplit    = "split"
 	EventMerge    = "merge"
 	EventComplete = "complete"
+	EventTrackIn  = "track_in"
+	EventTrackOut = "track_out"
+	EventAbort    = "abort"
+	EventPass     = "pass"
+	EventScrap    = "scrap"
+
+	MoveOpen      = "open"
+	MoveCompleted = "completed"
+	MoveAborted   = "aborted"
+
+	EqpIdle = "idle"
+	EqpDown = "down"
 )
 
 // WipWorkOrder releases lots onto one published route version.
@@ -71,6 +85,7 @@ type WipLot struct {
 	HoldReasonCode string         `gorm:"column:hold_reason_code;type:varchar(50)" json:"holdReasonCode"`
 	HoldReason     string         `gorm:"column:hold_reason;type:varchar(255)" json:"holdReason"`
 	ReworkJSON     string         `gorm:"column:rework_json;type:text" json:"reworkJson"`
+	ArrivedAt      *time.Time     `gorm:"column:arrived_at" json:"arrivedAt"`
 	CreatedAt      *time.Time     `gorm:"column:created_at" json:"createdAt"`
 	UpdatedAt      *time.Time     `gorm:"column:updated_at" json:"updatedAt"`
 	DeletedAt      gorm.DeletedAt `gorm:"column:deleted_at;index" json:"-"`

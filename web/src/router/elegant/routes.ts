@@ -275,6 +275,24 @@ export const generatedRoutes: GeneratedRoute[] = [
           title: 'wip_move',
           i18nKey: 'route.wip_move'
         }
+      },
+      {
+        name: 'wip_overview',
+        path: '/wip/overview',
+        component: 'view.wip_overview',
+        meta: {
+          title: 'wip_overview',
+          i18nKey: 'route.wip_overview'
+        }
+      },
+      {
+        name: 'wip_station',
+        path: '/wip/station',
+        component: 'view.wip_station',
+        meta: {
+          title: 'wip_station',
+          i18nKey: 'route.wip_station'
+        }
       }
     ]
   },

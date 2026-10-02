@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"fmt"
+	"time"
 
 	"semi-mes/server/internal/dao"
 	"semi-mes/server/internal/model"
@@ -46,6 +47,8 @@ func Seed(db *gorm.DB) error {
 		&model.WipLot{},
 		&model.WipLotHistory{},
 		&model.WipLotLink{},
+		&model.EqpEquipment{},
+		&model.WipMove{},
 	); err != nil {
 		return err
 	}
@@ -146,7 +149,7 @@ func seedSampleRoute(db *gorm.DB) error {
 		return err
 	}
 	if count > 0 {
-		return nil
+		return seedShopfloorFromExisting(db)
 	}
 	product := model.BaseProduct{ProductCode: "CMOS-DEMO", ProductName: "CMOS Demo", ProductType: "IC", Version: "A", Status: 1}
 	if err := db.Where(model.BaseProduct{ProductCode: "CMOS-DEMO"}).FirstOrCreate(&product).Error; err != nil {
@@ -188,7 +191,78 @@ func seedSampleRoute(db *gorm.DB) error {
 	if len(issues) > 0 {
 		return fmt.Errorf("sample route invalid: %s", issues[0].Code)
 	}
-	return nil
+	return seedShopfloor(db, product.ID, ver.ID)
+}
+
+func seedShopfloorFromExisting(db *gorm.DB) error {
+	var product model.BaseProduct
+	if err := db.Where("product_code = ?", "CMOS-DEMO").First(&product).Error; err != nil {
+		return nil
+	}
+	var ver model.BaseRouteVersion
+	if err := db.Where("state = ?", routegraph.StateReleased).Order("id desc").First(&ver).Error; err != nil {
+		return nil
+	}
+	return seedShopfloor(db, product.ID, ver.ID)
+}
+
+func seedShopfloor(db *gorm.DB, productID, versionID uint64) error {
+	tools := []model.EqpEquipment{
+		{EquipmentCode: "WET-01", EquipmentName: "清洗槽 Wet Bench", EquipmentGroup: "WET", EquipmentType: "WET", Status: model.EqpIdle},
+		{EquipmentCode: "PHOTO-01", EquipmentName: "光刻机 Stepper", EquipmentGroup: "PHOTO", EquipmentType: "PHOTO", Status: model.EqpIdle},
+		{EquipmentCode: "PHOTO-09", EquipmentName: "光刻机（停机）", EquipmentGroup: "PHOTO", EquipmentType: "PHOTO", Status: model.EqpDown},
+		{EquipmentCode: "METRO-01", EquipmentName: "检测机 Metrology", EquipmentGroup: "METRO", EquipmentType: "METRO", Status: model.EqpIdle},
+		{EquipmentCode: "ETCH-01", EquipmentName: "刻蚀机 Etcher", EquipmentGroup: "ETCH", EquipmentType: "ETCH", Status: model.EqpIdle},
+		{EquipmentCode: "ENG-01", EquipmentName: "工程台 Eng Bench", EquipmentGroup: "ENG", EquipmentType: "ENG", Status: model.EqpIdle},
+	}
+	for _, tool := range tools {
+		row := tool
+		if err := db.Where(model.EqpEquipment{EquipmentCode: tool.EquipmentCode}).FirstOrCreate(&row).Error; err != nil {
+			return err
+		}
+	}
+	var count int64
+	if err := db.Model(&model.WipWorkOrder{}).Where("order_no = ?", "DEMO-WIP").Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	now := time.Now()
+	arrived := now.Add(-2 * time.Hour)
+	order := model.WipWorkOrder{
+		OrderNo: "DEMO-WIP", ProductID: productID, RouteVersionID: versionID, PlannedQty: 30,
+		ReleasedQty: 16, NextLotSeq: 3, Priority: 3, Status: model.OrderInProgress, Note: "演示在制品",
+	}
+	if err := db.Create(&order).Error; err != nil {
+		return err
+	}
+	photoAt := arrived
+	lots := []model.WipLot{
+		{LotNo: "DEMO-WIP-001", OrderID: order.ID, ProductID: productID, RouteVersionID: versionID, CurrentNodeKey: "photo", Quantity: 10, Priority: 3, LotType: model.LotTypeProduction, Status: model.LotWaiting, ReworkJSON: "{}", ArrivedAt: &photoAt},
+		{LotNo: "DEMO-WIP-002", OrderID: order.ID, ProductID: productID, RouteVersionID: versionID, CurrentNodeKey: "inspect", Quantity: 4, Priority: 3, LotType: model.LotTypeEngineering, Status: model.LotHold, HoldReasonCode: "ENG_HOLD", HoldReason: "等待工程确认", ReworkJSON: "{}", ArrivedAt: &photoAt},
+	}
+	for i := range lots {
+		if err := db.Create(&lots[i]).Error; err != nil {
+			return err
+		}
+	}
+	trackIn := now.Add(-20 * time.Minute)
+	running := model.WipLot{
+		LotNo: "DEMO-WIP-003", OrderID: order.ID, ProductID: productID, RouteVersionID: versionID, CurrentNodeKey: "clean",
+		Quantity: 2, Priority: 3, LotType: model.LotTypeProduction, Status: model.LotRunning, ReworkJSON: "{}", ArrivedAt: &arrived,
+	}
+	if err := db.Create(&running).Error; err != nil {
+		return err
+	}
+	var wet model.EqpEquipment
+	if err := db.Where("equipment_code = ?", "WET-01").First(&wet).Error; err != nil {
+		return err
+	}
+	return db.Create(&model.WipMove{
+		LotID: running.ID, NodeKey: "clean", EquipmentID: wet.ID, OperatorID: 1, QtyIn: 2, State: model.MoveOpen,
+		TrackInAt: &trackIn, QueueSeconds: int(trackIn.Sub(arrived).Seconds()), FromNodeKey: "clean",
+	}).Error
 }
 
 func isBaseMenu(menu model.SysMenu) bool {
@@ -201,6 +275,12 @@ func isBaseMenu(menu model.SysMenu) bool {
 
 func isWipMenu(menu model.SysMenu) bool {
 	if menu.RouteName == "work-order" || menu.RouteName == "lot" || hasPrefix(menu.RouteName, "work-order_") || hasPrefix(menu.RouteName, "lot_") {
+		return true
+	}
+	if menu.RouteName == "wip" || hasPrefix(menu.RouteName, "wip_") || hasPrefix(menu.PermissionCode, "wip:") {
+		return true
+	}
+	if menu.RouteName == "equipment" || hasPrefix(menu.RouteName, "equipment_") || hasPrefix(menu.PermissionCode, "eqp:") {
 		return true
 	}
 	return hasPrefix(menu.PermissionCode, "wo:") || hasPrefix(menu.PermissionCode, "lot:")
@@ -306,7 +386,10 @@ func defaultMenus() []model.SysMenu {
 		{304, 301, 3, "route.lot_list", "lot:lot:add", "", "", "", "", 2},
 		{305, 301, 3, "route.lot_list", "lot:lot:edit", "", "", "", "", 3},
 		{400, 0, 1, "route.wip", "wip", "wip", "/wip", "layout.base", "mdi:transit-connection-variant", 6},
-		{401, 400, 2, "route.wip_move", "wip:move:query", "wip_move", "/wip/move", "view.wip_move", "mdi:transfer", 1},
+		{401, 400, 2, "route.wip_move", "wip:move:query", "wip_move", "/wip/move", "view.wip_move", "mdi:transfer", 3},
+		{410, 400, 2, "route.wip_station", "wip:move:query", "wip_station", "/wip/station", "view.wip_station", "mdi:barcode-scan", 1},
+		{411, 400, 2, "route.wip_overview", "wip:move:query", "wip_overview", "/wip/overview", "view.wip_overview", "mdi:view-dashboard", 2},
+		{413, 401, 3, "route.wip_move", "wip:move:track", "", "", "", "", 1},
 		{500, 0, 1, "route.equipment", "equipment", "equipment", "/equipment", "layout.base", "mdi:wrench", 7},
 		{501, 500, 2, "route.equipment_list", "eqp:equipment:query", "equipment_list", "/equipment/list", "view.equipment_list", "mdi:format-list-bulleted", 1},
 		{600, 0, 1, "route.quality", "quality", "quality", "/quality", "layout.base", "mdi:clipboard-check", 8},

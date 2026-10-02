@@ -95,6 +95,7 @@ export function fetchLot(id: number) {
     lot: LotRow;
     history: Array<Record<string, any>>;
     links: Array<Record<string, any>>;
+    moves: Array<Record<string, any>>;
     nodes: Array<Record<string, any>>;
     edges: Array<Record<string, any>>;
   }>({ url: `/wipLot/${id}` });
