@@ -338,9 +338,13 @@ async function selectVersion(id: number) {
       }
     });
   });
-  sim.node = nodes.value[0]?.id || '';
+  sim.node = nodes.value.find(node => node.data.nodeType === 'decision')?.id || nodes.value[0]?.id || '';
   await nextTick();
-  fitView({ padding: 0.2 });
+  fitView({ padding: 0.16 });
+}
+
+function fitGraph() {
+  fitView({ padding: 0.16 });
 }
 
 function addNode(type: string, position?: { x: number; y: number }) {
@@ -662,6 +666,7 @@ onMounted(async () => {
         :row-key="row => row.id"
         :row-props="row => ({ style: 'cursor: pointer', onClick: () => selectRoute(row.id) })"
         size="small"
+        max-height="140"
       />
     </NCard>
 
@@ -744,6 +749,7 @@ onMounted(async () => {
             :nodes-connectable="editable"
             :elements-selectable="true"
             fit-view-on-init
+            @nodes-initialized="fitGraph"
             @connect="onConnect"
             @node-click="
               ({ node }) => {
@@ -1034,7 +1040,7 @@ onMounted(async () => {
 .flow-wrap {
   flex: 1;
   min-width: 0;
-  height: 640px;
+  height: 480px;
   border: 1px solid var(--n-border-color, #e5e7eb);
   border-radius: 8px;
 }
