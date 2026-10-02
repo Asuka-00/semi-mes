@@ -120,7 +120,7 @@ func GetStation(db *gorm.DB, lotNo string) (*StationView, error) {
 		view.Lot = rows[0]
 	}
 	if node.Type == routegraph.NodeOperation {
-		eqp, err := allowedEquipment(db, node.EquipmentGroup, false)
+		eqp, err := allowedEquipment(db, node.EquipmentGroup, node.OperationID, node.RecipeID)
 		if err != nil {
 			return nil, err
 		}
@@ -161,11 +161,11 @@ func TrackIn(db *gorm.DB, in TrackInInput) (*model.WipLot, *model.WipMove, error
 		if err != nil {
 			return err
 		}
-		if !equipmentAllowed(eqp, node.EquipmentGroup) {
-			return ErrWipEquipment
-		}
 		recipeID, err := resolveRecipe(tx, node, in.RecipeID)
 		if err != nil {
+			return err
+		}
+		if err := TrackInGate(tx, eqp, node, recipeID); err != nil {
 			return err
 		}
 		now := time.Now()
@@ -192,6 +192,9 @@ func TrackIn(db *gorm.DB, in TrackInInput) (*model.WipLot, *model.WipMove, error
 			LotID: row.ID, EventType: model.EventTrackIn, FromNodeKey: node.Key, ToNodeKey: node.Key,
 			Quantity: row.Quantity, RelatedLotID: eqp.ID,
 		}).Error; err != nil {
+			return err
+		}
+		if err := occupyEquipment(tx, eqp, in.OperatorID); err != nil {
 			return err
 		}
 		lot = row
@@ -230,6 +233,9 @@ func AbortTrackIn(db *gorm.DB, lotID, operatorID uint64, reason string) (*model.
 			LotID: row.ID, EventType: model.EventAbort, FromNodeKey: row.CurrentNodeKey, ToNodeKey: row.CurrentNodeKey,
 			Reason: reason, Quantity: row.Quantity,
 		}).Error; err != nil {
+			return err
+		}
+		if err := releaseEquipment(tx, move.EquipmentID, operatorID); err != nil {
 			return err
 		}
 		lot = row
@@ -283,6 +289,15 @@ func TrackOut(db *gorm.DB, in TrackOutInput) (*model.WipLot, routegraph.Result, 
 			}).Error; err != nil {
 				return err
 			}
+			if err := releaseEquipment(tx, move.EquipmentID, in.OperatorID); err != nil {
+				return err
+			}
+			if err := bumpPmLots(tx, move.EquipmentID); err != nil {
+				return err
+			}
+			if err := EnsurePmTasks(tx); err != nil {
+				return err
+			}
 			lot = row
 			result = routegraph.Result{Action: "scrap", Reason: in.ScrapReasonCode}
 			return refreshOrder(tx, row.OrderID)
@@ -294,6 +309,15 @@ func TrackOut(db *gorm.DB, in TrackOutInput) (*model.WipLot, routegraph.Result, 
 			return err
 		}
 		if err := closeMove(tx, move, in, now, row.CurrentNodeKey, result); err != nil {
+			return err
+		}
+		if err := releaseEquipment(tx, move.EquipmentID, in.OperatorID); err != nil {
+			return err
+		}
+		if err := bumpPmLots(tx, move.EquipmentID); err != nil {
+			return err
+		}
+		if err := EnsurePmTasks(tx); err != nil {
 			return err
 		}
 		lot = row
@@ -480,17 +504,22 @@ func inspectionRequired(g routegraph.Graph, key string) bool {
 	return false
 }
 
-func allowedEquipment(db *gorm.DB, group string, includeDown bool) ([]model.EqpEquipment, error) {
+func allowedEquipment(db *gorm.DB, group string, operationID, recipeID uint64) ([]model.EqpEquipment, error) {
 	q := db.Model(&model.EqpEquipment{})
 	if group != "" {
 		q = q.Where("equipment_group = ?", group)
 	}
-	if !includeDown {
-		q = q.Where("status <> ?", model.EqpDown)
-	}
 	var rows []model.EqpEquipment
-	err := q.Order("equipment_code").Find(&rows).Error
-	return rows, err
+	if err := q.Order("equipment_code").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]model.EqpEquipment, 0, len(rows))
+	for i := range rows {
+		if canTrackIn(db, &rows[i], group, operationID, recipeID) == nil {
+			out = append(out, rows[i])
+		}
+	}
+	return out, nil
 }
 
 func loadEquipment(db *gorm.DB, id uint64) (*model.EqpEquipment, error) {
@@ -503,16 +532,6 @@ func loadEquipment(db *gorm.DB, id uint64) (*model.EqpEquipment, error) {
 		return nil, err
 	}
 	return &row, nil
-}
-
-func equipmentAllowed(eqp *model.EqpEquipment, group string) bool {
-	if eqp.Status == model.EqpDown {
-		return false
-	}
-	if group == "" {
-		return true
-	}
-	return eqp.EquipmentGroup == group
 }
 
 func resolveRecipe(db *gorm.DB, node routegraph.Node, recipeID uint64) (uint64, error) {

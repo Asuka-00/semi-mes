@@ -44,8 +44,15 @@ const (
 	MoveCompleted = "completed"
 	MoveAborted   = "aborted"
 
-	EqpIdle = "idle"
-	EqpDown = "down"
+	// SEMI E10-style equipment states. idle/down remain only so older rows can be migrated.
+	EqpStandby         = "standby"
+	EqpProductive      = "productive"
+	EqpEngineering     = "engineering"
+	EqpScheduledDown   = "scheduled_down"
+	EqpUnscheduledDown = "unscheduled_down"
+	EqpNonScheduled    = "non_scheduled"
+	EqpIdle            = "idle"
+	EqpDown            = "down"
 )
 
 // WipWorkOrder releases lots onto one published route version.
