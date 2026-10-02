@@ -260,7 +260,7 @@ flowchart LR
 
 `base_route_edge`：`edge_key`、`from_key`、`to_key`、`edge_kind`（`normal` / `rework`）、`is_default`、`priority`、`condition_json`、`max_rework`、`on_exceed`、`label`。返工边在图上用虚线区分。`on_exceed` 目前只有 `hold`。
 
-这三张新表使用 GORM 的 `DeletedAt` 做软删除。Sponge 生成的旧模型仍是 `*time.Time`，删除仍是物理删除：改成 `gorm.DeletedAt` 会让生成的 sqlmock 用例按字段展开参数而失败，没有和流程图一起改。
+工艺路线版本、节点、边，以及工厂、车间、产线、产品、工艺路线头、工序、配方这些基础表都使用 GORM 的 `DeletedAt` 做软删除。系统表（用户、角色、菜单）仍是 `*time.Time`，删除仍是物理删除。
 
 ##### 条件
 
@@ -412,41 +412,49 @@ Track Out 要求批次是 running，并且有一条未关闭的进站记录。�
 
 `eqp_pm_plan` 可以挂在一台设备上，也可以 `equipment_id = 0` 挂在整个设备组。触发是 `time`、`count` 或 `both`。时间看 `next_due_at` 和 `interval_days`。计数看 `lots_since` 和 `interval_count`，每完成一次出站加 1，计的是批次数，不是晶圆片数。`block_track_in` 为真时，到期且仍是 due/overdue 的任务会拒绝进站。
 
-列表和生成接口都会调用 `EnsurePmTasks`。到期且没有未完成任务时生成 `eqp_pm_task`，到期日已过则状态是 overdue，否则是 due。开始 PM 要求设备没有在制批次，并把设备切到计划停机。完成时每条检查项都要有 pass 或 fail，整单结果也是 pass 或 fail。完成后清零批次数，并按间隔天数推下次到期。若该设备没有其他执行中的 PM，且当前是计划停机，则回到待机。
+列表和生成接口都会调用 `EnsurePmTasks`。到期且没有未完成任务时生成 `eqp_pm_task`，到期日已过则状态是 overdue，否则是 due。开始 PM 要求设备没有在制批次，并把设备切到计划停机。若开始前是待机或工程，这个状态写入 `resume_state`。完成时每条检查项都要有 pass 或 fail，整单结果也是 pass 或 fail。完成后清零批次数，并按间隔天数推下次到期。若该设备没有其他执行中的 PM，且当前是计划停机，则回到 `resume_state`（待机或工程），否则回到待机。
 
 状态看板统计各状态台数、超期任务数，以及过去 24 小时生产状态重叠秒数占 86400 的比例。
 
 ### 3.6 模块5：质量管理 (Quality Management)
 
-#### 3.6.1 检验记录表 (qc_inspection)
+质量数据挂在工序上，并和在制品、设备共用同一套批次与设备主数据。
 
-| 字段名 | 类型 | 说明 |
-|--------|------|------|
-| id | bigint | 主键ID |
-| inspection_no | varchar(50) | 检验单号，唯一 |
-| lot_id | bigint | 批次ID |
-| operation_id | bigint | 工序ID |
-| inspection_type | varchar(20) | 检验类型：IQC, PQC, FQC, OQC |
-| inspector_id | bigint | 检验员ID |
-| sample_size | int | 抽样数量 |
-| defect_count | int | 不良数量 |
-| result | varchar(20) | 结果：PASS, FAIL, PENDING |
-| inspection_time | timestamp | 检验时间 |
-| created_at | timestamp | 创建时间 |
-| updated_at | timestamp | 更新时间 |
+#### 3.6.1 检验计划
 
-#### 3.6.2 缺陷记录表 (qc_defect)
+`qc_inspect_plan` 按 `operation_id` 建计划，`product_id = 0` 表示该工序下所有产品。同一工序同时有产品专用计划和通用计划时，用产品专用的。`qc_inspect_item` 是参数：单位、目标、规格上下限 LSL/USL、控制限、样本数、必填或可选。空的某一侧规格不检查。必填项缺样或超规格，整批判 fail；可选项失败不判整批失败。
 
-| 字段名 | 类型 | 说明 |
-|--------|------|------|
-| id | bigint | 主键ID |
-| inspection_id | bigint | 检验记录ID |
-| defect_code | varchar(50) | 缺陷代码 |
-| defect_name | varchar(100) | 缺陷名称 |
-| defect_count | int | 缺陷数量 |
-| severity | varchar(20) | 严重性：CRITICAL, MAJOR, MINOR |
-| description | varchar(500) | 描述 |
-| created_at | timestamp | 创建时间 |
+检测工序出站时，若当前工序有计划，必须提交量测值，系统按规格自动判 pass/fail，写入 `qc_judgement`，并覆盖自由文本结果。判定节点离开时如果没有再填结果，就用该批次最近一次判定，返工和分支因此吃到真实量测。没有计划的工序仍使用原来的自由文本结果。
+
+另有独立的量测录入页，对等待中的批次补录同一套数据。出站当时批次还在加工，失控反应里的 Hold 不会在这一步生效，判定交给路线解析；独立录入时批次已是等待，Hold 可以生效。
+
+#### 3.6.2 缺陷
+
+`qc_defect_code` 是缺陷代码主数据，含类别和严重度。`qc_defect` 记到批次、节点、工序和设备，带数量和处置：
+
+| 处置 | 效果 |
+|------|------|
+| scrap | 扣减批次数量，扣到 0 则报废，并写报废履历 |
+| hold | 批次改为 Hold，原因用缺陷代码 |
+| rework | 只写返工履历，不自己跳节点 |
+| use_as_is | 写特采履历，数量和状态不变 |
+
+柏拉图按缺陷代码汇总数量。
+
+#### 3.6.3 SPC
+
+样本数为 1 时画 I-MR（E2 = 2.660）。样本数大于 1 时按子组均值画 X-bar，控制限用 A2 乘以子组均值的移动极差，没有单独的 R 图。`qc_spc_limit.use_manual` 为真时用手工中心线和上下控制限，规则和图形用同一套限。
+
+Nelson / Western Electric 规则至少实现 1 到 4，并且只看最新一点：
+
+1. 超出控制限
+2. 连续 9 点在中心线同一侧
+3. 连续 6 点严格单调
+4. 连续 14 点交替升降
+
+违规写成 `qc_spc_event`，`kind` 为 ooc；若该点同时超规格则为 oos。`qc_spc_policy` 按参数和工序配置反应：不处理、Hold 批次、设备切工程、设备切非计划停机，或 Hold 加设备状态。设备已在目标状态时不再切换。
+
+种子数据在 INSPECT 上放线宽 CD（目标 500 nm，LSL 470，USL 530），手工控制限 480/500/520，并给 DEMO-QC 写入一组靠近目标的读数和一点 620，图上能看到规则 1。缺陷柏拉图用 DEMO-WIP-001 的特采记录，不报废在制演示批。
 
 ### 3.7 ER关系图
 
@@ -472,8 +480,12 @@ Track Out 要求批次是 running，并且有一条未关闭的进站记录。�
 [eqp_pm_plan] 1---N [eqp_pm_task]
 [eqp_equipment] 1---N [wip_move_history]
 
-[wip_lot] 1---N [qc_inspection]
-[qc_inspection] 1---N [qc_defect]
+[base_operation] 1---N [qc_inspect_plan] 1---N [qc_inspect_item]
+[wip_lot] 1---N [qc_measurement]
+[wip_lot] 1---N [qc_judgement]
+[wip_lot] 1---N [qc_defect]
+[qc_defect_code] 1---N [qc_defect]
+[wip_lot] 1---N [qc_spc_event]
 ```
 
 ## 4. API设计规范 (API Conventions)
@@ -878,8 +890,15 @@ WIP跟踪 (wip)
   │   ├── 编辑 / 开始 / 完成 (eqp:pm:edit)
   │   └── 删除 (eqp:pm:delete)
   └── PM 任务 (eqp:pm:query)
-质量管理 (quality) - 待实现
-  └── 检验记录 (qc:inspection:query)
+质量管理 (quality)
+  ├── 量测录入 (qc:measure:query，录入 qc:measure:add)
+  ├── 检验计划 (qc:plan:query)
+  │   ├── 新增 (qc:plan:add)
+  │   ├── 编辑 (qc:plan:edit)
+  │   └── 删除 (qc:plan:delete)
+  ├── 缺陷 (qc:defect:query，记录 qc:defect:add)
+  ├── 缺陷柏拉图 (qc:defect:query)
+  └── SPC (qc:spc:query，反应配置 qc:spc:edit)
 ```
 
 ## 10. 技术要点
@@ -935,13 +954,15 @@ WIP跟踪 (wip)
 - ✅ 进站占用为生产，出站或取消进站后释放；停机、满载、能力不符、超期且配置拦截的 PM 拒绝进站
 - ✅ 按时间或批次数的 PM 计划、自动生成任务、检查项执行，PM 期间切到计划停机
 - ✅ 台账、详情、状态切换、PM 计划、PM 任务、状态看板
-- 未做：单腔或端口状态；PM 计数按出站批次而不是晶圆片数；没有 PM 日历和通知；完成 PM 后从计划停机回到待机，不会回到进 PM 前的工程状态；Sponge 生成的旧表仍是物理删除
+- 未做：单腔或端口状态；PM 计数按出站批次而不是晶圆片数；没有 PM 日历和通知。完成 PM 后回到进 PM 前的待机或工程状态。基础主数据表已改为软删除；系统表仍是物理删除
 
-### 阶段5：质量管理
-- 检验计划
-- 检验记录
-- 缺陷分析
-- SPC控制图
+### 阶段5：质量管理（本次）
+- ✅ 按工序（可选产品）的检验计划和量测项；检测出站采集量测、按规格判 pass/fail，并供判定节点使用
+- ✅ 独立量测录入
+- ✅ 缺陷代码、缺陷记录和处置（报废、Hold、返工履历、特采），以及柏拉图
+- ✅ I-MR / X-bar、规则 1–4、OOC/OOS 事件和可配置反应；控制图按产品、工序、设备、参数和时间过滤
+- ✅ 演示量测含至少一次 OOC
+- 未做：没有单独的 R 图，X-bar 的极差是子组均值的移动极差；没有邮件或消息通知；出站当时批次仍在加工，反应里的 Hold 要等批次回到等待（独立录入或之后的处置）才会扣留；返工处置只写履历，不自己移动批次；系统表仍是物理删除
 
 ### 阶段6：报表和看板
 - 生产进度看板

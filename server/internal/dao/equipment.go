@@ -588,7 +588,14 @@ func StartPm(db *gorm.DB, taskID, operatorID uint64) (*model.EqpPmTask, error) {
 		if err != nil {
 			return err
 		}
-		if NormalizeEqpState(eqp.Status) != model.EqpScheduledDown {
+		state := NormalizeEqpState(eqp.Status)
+		if state == model.EqpStandby || state == model.EqpEngineering {
+			if err := tx.Model(eqp).Update("resume_state", state).Error; err != nil {
+				return err
+			}
+			eqp.ResumeState = state
+		}
+		if state != model.EqpScheduledDown {
 			if err := applyState(tx, eqp, model.EqpScheduledDown, "PM_START", "", operatorID, true); err != nil {
 				return err
 			}
@@ -651,7 +658,11 @@ func CompletePm(db *gorm.DB, taskID, operatorID uint64, items []CheckItem, resul
 			return err
 		}
 		if still == 0 && NormalizeEqpState(eqp.Status) == model.EqpScheduledDown {
-			if err := applyState(tx, eqp, model.EqpStandby, "PM_DONE", result, operatorID, true); err != nil {
+			back := eqp.ResumeState
+			if back != model.EqpStandby && back != model.EqpEngineering {
+				back = model.EqpStandby
+			}
+			if err := applyState(tx, eqp, back, "PM_DONE", result, operatorID, true); err != nil {
 				return err
 			}
 		}

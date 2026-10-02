@@ -258,7 +258,11 @@ const local: App.I18n.Schema = {
     'equipment_pm-plan': 'PM Plans',
     'equipment_pm-task': 'PM Tasks',
     quality: 'Quality',
-    quality_inspection: 'Inspections'
+    quality_inspection: 'Measurement',
+    quality_plan: 'Inspection plans',
+    quality_defect: 'Defects',
+    quality_pareto: 'Defect Pareto',
+    quality_spc: 'SPC'
   },
   page: {
     login: {
@@ -667,6 +671,44 @@ const local: App.I18n.Schema = {
         task_cancelled: 'Cancelled',
         pass: 'Pass',
         fail: 'Fail'
+      },
+      qc: {
+        measure: 'Measurement entry',
+        plan: 'Inspection plan',
+        defect: 'Defects',
+        pareto: 'Defect Pareto',
+        spc: 'Control chart',
+        param: 'Parameter',
+        paramName: 'Parameter name',
+        unit: 'Unit',
+        target: 'Target',
+        sample: 'Sample size',
+        required: 'Required',
+        enabled: 'Enabled',
+        yes: 'Yes',
+        no: 'No',
+        operation: 'Operation',
+        product: 'Product (0 = any)',
+        latest: 'Latest judgement',
+        judgement: 'Judgement',
+        noPlan: 'This step has no inspection plan',
+        code: 'Defect code',
+        name: 'Name',
+        category: 'Category',
+        severity: 'Severity',
+        disposition: 'Disposition',
+        useAsIs: 'Use as is',
+        rework: 'Rework',
+        scrap: 'Scrap',
+        hold: 'Hold',
+        addCode: 'Add defect code',
+        lotId: 'Lot ID',
+        saved: 'Saved',
+        reaction: 'Reaction',
+        kind: 'Kind',
+        rule: 'Rule',
+        value: 'Value',
+        useJudgement: 'Use measurement'
       }
     }
   },

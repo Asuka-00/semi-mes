@@ -409,6 +409,8 @@ func writeWipErr(c *gin.Context, err error) {
 		c.JSON(200, gin.H{"code": 40009, "msg": i18n.T(c, "error.eqp.pm"), "data": struct{}{}})
 	case errors.Is(err, dao.ErrWipInspect):
 		c.JSON(200, gin.H{"code": 40009, "msg": i18n.T(c, "error.wip.inspect"), "data": struct{}{}})
+	case errors.Is(err, dao.ErrQc):
+		c.JSON(200, gin.H{"code": 40009, "msg": i18n.T(c, "error.qc.rejected"), "data": struct{}{}})
 	case errors.Is(err, dao.ErrWipTrack):
 		c.JSON(200, gin.H{"code": 40009, "msg": i18n.T(c, "error.wip.track"), "data": struct{}{}})
 	case errors.Is(err, routegraph.ErrNoPath):

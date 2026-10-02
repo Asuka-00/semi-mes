@@ -43,8 +43,10 @@ func Test_baseProductDao_Create(t *testing.T) {
 	testData := d.TestData.(*model.BaseProduct)
 
 	d.SQLMock.ExpectBegin()
+	insertArgs := d.GetAnyArgs(testData)
+	insertArgs = insertArgs[:len(insertArgs)-1] // gorm.DeletedAt is one column but reflects as two fields
 	d.SQLMock.ExpectExec("INSERT INTO .*").
-		WithArgs(d.GetAnyArgs(testData)...).
+		WithArgs(insertArgs...).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	d.SQLMock.ExpectCommit()
 
@@ -58,12 +60,12 @@ func Test_baseProductDao_DeleteByID(t *testing.T) {
 	d := newBaseProductDao()
 	defer d.Close()
 	testData := d.TestData.(*model.BaseProduct)
-	expectedSQLForDeletion := "DELETE .*"
+	expectedSQLForDeletion := "UPDATE .*"
 	
 
 	d.SQLMock.ExpectBegin()
 	d.SQLMock.ExpectExec(expectedSQLForDeletion).
-		WithArgs(testData.ID).
+		WithArgs(d.AnyTime, testData.ID).
 		WillReturnResult(sqlmock.NewResult(int64(testData.ID), 1))
 	d.SQLMock.ExpectCommit()
 
@@ -187,8 +189,10 @@ func Test_baseProductDao_CreateByTx(t *testing.T) {
 	testData := d.TestData.(*model.BaseProduct)
 
 	d.SQLMock.ExpectBegin()
+	insertArgs := d.GetAnyArgs(testData)
+	insertArgs = insertArgs[:len(insertArgs)-1] // gorm.DeletedAt is one column but reflects as two fields
 	d.SQLMock.ExpectExec("INSERT INTO .*").
-		WithArgs(d.GetAnyArgs(testData)...).
+		WithArgs(insertArgs...).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	d.SQLMock.ExpectCommit()
 
@@ -202,12 +206,12 @@ func Test_baseProductDao_DeleteByTx(t *testing.T) {
 	d := newBaseProductDao()
 	defer d.Close()
 	testData := d.TestData.(*model.BaseProduct)
-	expectedSQLForDeletion := "DELETE .*"
+	expectedSQLForDeletion := "UPDATE .*"
 	
 
 	d.SQLMock.ExpectBegin()
 	d.SQLMock.ExpectExec(expectedSQLForDeletion).
-		WithArgs(testData.ID).
+		WithArgs(d.AnyTime, testData.ID).
 		WillReturnResult(sqlmock.NewResult(int64(testData.ID), 1))
 	d.SQLMock.ExpectCommit()
 

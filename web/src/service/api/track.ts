@@ -8,6 +8,17 @@ export interface EquipmentRow {
   status: string;
 }
 
+export interface InspectItemView {
+  paramCode: string;
+  paramName: string;
+  unit: string;
+  target?: number | null;
+  lsl?: number | null;
+  usl?: number | null;
+  sampleSize: number;
+  required: boolean;
+}
+
 export interface StationView {
   lot: Record<string, any>;
   nodeType: string;
@@ -16,6 +27,14 @@ export interface StationView {
   operationID: number;
   recipeID: number;
   inspectionRequired: boolean;
+  inspectPlan?: {
+    id: number;
+    operationID: number;
+    planName: string;
+    operationCode?: string;
+    items: InspectItemView[];
+  } | null;
+  latestResult?: string;
   openMove: Record<string, any> | null;
   equipment: EquipmentRow[];
 }

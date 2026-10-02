@@ -14,6 +14,7 @@ const qtyOut = ref(0);
 const qtyScrap = ref(0);
 const scrapReason = ref('PARTICLE');
 const inspection = ref('pass');
+const readings = ref<Record<string, number[]>>({});
 const defectCode = ref('');
 const abortReason = ref('');
 const resultText = ref('');
@@ -42,6 +43,11 @@ async function load() {
   }
   station.value = data;
   equipmentId.value = data.equipment[0]?.id ?? null;
+  readings.value = {};
+  (data.inspectPlan?.items || []).forEach(item => {
+    readings.value[item.paramCode] = Array.from({ length: item.sampleSize || 1 }, () => item.target ?? 0);
+  });
+  if (data.latestResult) inspection.value = '';
   const qty = Number(data.lot?.quantity || 0);
   qtyOut.value = qty;
   qtyScrap.value = 0;
@@ -63,7 +69,10 @@ async function doTrackOut() {
     qtyOut: qtyOut.value,
     qtyScrap: qtyScrap.value,
     scrapReasonCode: qtyScrap.value > 0 ? scrapReason.value : '',
-    inspectionResult: station.value.inspectionRequired ? inspection.value : '',
+    inspectionResult: station.value.inspectPlan ? '' : station.value.inspectionRequired ? inspection.value : '',
+    measurements: station.value.inspectPlan
+      ? Object.entries(readings.value).map(([paramCode, values]) => ({ paramCode, values }))
+      : [],
     defectCode: defectCode.value
   });
   if (error || !data) return;
@@ -118,12 +127,14 @@ async function doPass() {
           <NSelect
             v-if="station.inspectionRequired"
             v-model:value="inspection"
-            class="w-140px"
+            class="w-180px"
             :options="[
+              { label: $t('page.mes.qc.useJudgement'), value: '' },
               { label: $t('page.mes.routeGraph.pass'), value: 'pass' },
               { label: $t('page.mes.routeGraph.fail'), value: 'fail' }
             ]"
           />
+          <span v-if="station.latestResult">{{ $t('page.mes.qc.latest') }} {{ station.latestResult }}</span>
           <NInput v-model:value="defectCode" class="w-160px" :placeholder="$t('page.mes.wip.defectCode')" />
           <NButton type="primary" @click="doPass">{{ $t('page.mes.track.pass') }}</NButton>
         </NSpace>
@@ -134,8 +145,19 @@ async function doPass() {
           <NInputNumber v-model:value="qtyOut" :min="0" class="w-140px" :placeholder="$t('page.mes.track.qtyOut')" />
           <NInputNumber v-model:value="qtyScrap" :min="0" class="w-140px" :placeholder="$t('page.mes.track.qtyScrap')" />
           <NSelect v-if="qtyScrap > 0" v-model:value="scrapReason" :options="scrapOptions" class="w-160px" />
+          <template v-if="station.inspectPlan">
+            <div v-for="item in station.inspectPlan.items" :key="item.paramCode" class="flex items-center gap-8px">
+              <span>{{ item.paramCode }}</span>
+              <NInputNumber
+                v-for="(_, index) in readings[item.paramCode]"
+                :key="index"
+                v-model:value="readings[item.paramCode][index]"
+                class="w-120px"
+              />
+            </div>
+          </template>
           <NSelect
-            v-if="station.inspectionRequired"
+            v-else-if="station.inspectionRequired"
             v-model:value="inspection"
             class="w-140px"
             :options="[

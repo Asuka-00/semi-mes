@@ -29,6 +29,7 @@ var zhCN = map[string]string{
 	"error.eqp.pm":                    "保养任务当前不能开始或完成",
 	"error.wip.inspect":               "离开这个节点需要检验或量测结果",
 	"error.wip.track":                 "批次当前状态不能进站、出站或取消进站",
+	"error.qc.rejected":               "质量数据不完整，缺陷代码不存在，或当前批次不能做这个处置",
 }
 
 var enUS = map[string]string{
@@ -54,6 +55,7 @@ var enUS = map[string]string{
 	"error.eqp.pm":                    "This PM task cannot be started or completed",
 	"error.wip.inspect":               "This step requires an inspection or measurement result",
 	"error.wip.track":                 "The lot cannot track in, track out, or abort in its current status",
+	"error.qc.rejected":               "Quality data is incomplete, the defect code is unknown, or this lot cannot take that disposition",
 }
 
 // T returns a message for the request language. Default is zh-CN.

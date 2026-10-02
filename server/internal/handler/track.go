@@ -16,14 +16,20 @@ type trackInBody struct {
 	RecipeID    uint64 `json:"recipeId"`
 }
 
+type sampleBody struct {
+	ParamCode string    `json:"paramCode"`
+	Values    []float64 `json:"values"`
+}
+
 type trackOutBody struct {
-	LotID            uint64 `json:"lotId"`
-	QtyOut           int    `json:"qtyOut"`
-	QtyScrap         int    `json:"qtyScrap"`
-	ScrapReasonCode  string `json:"scrapReasonCode"`
-	InspectionResult string `json:"inspectionResult"`
-	InspectionGrade  string `json:"inspectionGrade"`
-	DefectCode       string `json:"defectCode"`
+	LotID            uint64       `json:"lotId"`
+	QtyOut           int          `json:"qtyOut"`
+	QtyScrap         int          `json:"qtyScrap"`
+	ScrapReasonCode  string       `json:"scrapReasonCode"`
+	InspectionResult string       `json:"inspectionResult"`
+	InspectionGrade  string       `json:"inspectionGrade"`
+	DefectCode       string       `json:"defectCode"`
+	Measurements     []sampleBody `json:"measurements"`
 }
 
 type passBody struct {
@@ -79,10 +85,14 @@ func TrackOut(c *gin.Context) {
 		return
 	}
 	op, _ := currentUserID(c)
+	samples := make([]dao.SampleInput, 0, len(body.Measurements))
+	for _, sample := range body.Measurements {
+		samples = append(samples, dao.SampleInput{ParamCode: sample.ParamCode, Values: sample.Values})
+	}
 	lot, result, err := dao.TrackOut(database.GetDB(), dao.TrackOutInput{
 		LotID: body.LotID, QtyOut: body.QtyOut, QtyScrap: body.QtyScrap, ScrapReasonCode: body.ScrapReasonCode,
 		InspectionResult: body.InspectionResult, InspectionGrade: body.InspectionGrade, DefectCode: body.DefectCode,
-		OperatorID: op,
+		Measurements: samples, OperatorID: op,
 	})
 	if err != nil {
 		writeWipErr(c, err)
