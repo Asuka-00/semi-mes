@@ -19,7 +19,7 @@ const route = useRoute();
 const router = useRouter();
 const { hasAuth } = useAuth();
 const canEdit = computed(() => hasAuth('lot:lot:edit'));
-const { fitView } = useVueFlow({ id: 'lot-detail' });
+const { fitView, setViewport } = useVueFlow('lot-detail');
 
 const lot = ref<Record<string, any> | null>(null);
 const history = ref<Array<Record<string, any>>>([]);
@@ -34,6 +34,38 @@ const reasonCode = ref('HOLD');
 const reason = ref('');
 
 const lotId = computed(() => Number(props.id || route.params.id));
+const lotFlow = ref<HTMLElement | null>(null);
+
+async function fitLot() {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const fitted = await fitView({ padding: 0.2, duration: 0 });
+    if (fitted) return;
+    await new Promise(resolve => window.setTimeout(resolve, 80));
+  }
+  const list = flowNodes.value;
+  const box = lotFlow.value;
+  if (!list.length || !box) return;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  list.forEach(node => {
+    minX = Math.min(minX, node.position.x);
+    minY = Math.min(minY, node.position.y);
+    maxX = Math.max(maxX, node.position.x + 140);
+    maxY = Math.max(maxY, node.position.y + 48);
+  });
+  const width = box.clientWidth || 640;
+  const height = box.clientHeight || 320;
+  const boundsW = Math.max(1, maxX - minX);
+  const boundsH = Math.max(1, maxY - minY);
+  const zoom = Math.min((width * 0.84) / boundsW, (height * 0.84) / boundsH, 1.25);
+  await setViewport({
+    x: (width - boundsW * zoom) / 2 - minX * zoom,
+    y: (height - boundsH * zoom) / 2 - minY * zoom,
+    zoom
+  });
+}
 
 const flowNodes = computed(() =>
   nodes.value.map(node => ({
@@ -109,7 +141,7 @@ async function load() {
   nodes.value = data.nodes || [];
   edges.value = data.edges || [];
   await nextTick();
-  fitView({ padding: 0.2 });
+  await fitLot();
 }
 
 async function advance() {
@@ -173,8 +205,8 @@ watch(lotId, load);
       </NGi>
     </NGrid>
     <div class="mb-8px font-600">{{ $t('page.mes.wip.position') }}</div>
-    <div class="flow-wrap mb-16px">
-      <VueFlow id="lot-detail" :nodes="flowNodes" :edges="flowEdges" :nodes-draggable="false" :nodes-connectable="false" :edges-updatable="false" fit-view-on-init @nodes-initialized="fitView({ padding: 0.2 })">
+    <div ref="lotFlow" class="flow-wrap mb-16px">
+      <VueFlow id="lot-detail" :nodes="flowNodes" :edges="flowEdges" :nodes-draggable="false" :nodes-connectable="false" :edges-updatable="false" :min-zoom="0.1" :max-zoom="1.5" fit-view-on-init @nodes-initialized="fitLot">
         <Background />
         <Controls />
         <MiniMap />
@@ -211,9 +243,15 @@ watch(lotId, load);
 
 <style scoped>
 .flow-wrap {
-  height: calc(100vh - 280px);
-  min-height: 320px;
+  height: min(420px, calc(100vh - 220px));
+  min-height: 280px;
   border: 1px solid var(--n-border-color);
   border-radius: 8px;
+  overflow: hidden;
+}
+
+.flow-wrap :deep(.vue-flow) {
+  width: 100%;
+  height: 100%;
 }
 </style>

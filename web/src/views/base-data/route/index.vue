@@ -81,7 +81,7 @@ interface FlowEdge {
 
 const { hasAuth } = useAuth();
 const { locale } = useI18n();
-const { screenToFlowCoordinate, fitView } = useVueFlow({ id: 'route-editor' });
+const { screenToFlowCoordinate, fitView, setViewport } = useVueFlow('route-editor');
 
 const canAdd = computed(() => hasAuth('base:route:add'));
 const canEdit = computed(() => hasAuth('base:route:edit'));
@@ -340,17 +340,45 @@ async function selectVersion(id: number) {
   });
   sim.node = nodes.value.find(node => node.data.nodeType === 'decision')?.id || nodes.value[0]?.id || '';
   await nextTick();
-  fitView({ padding: 0.16 });
+  await fitGraph();
 }
 
 const flowWrap = ref<HTMLElement | null>(null);
 let flowObserver: ResizeObserver | null = null;
 
-function fitGraph() {
-  nextTick(() => {
-    fitView({ padding: 0.2, duration: 180 });
-    window.setTimeout(() => fitView({ padding: 0.2, duration: 180 }), 60);
+async function fitGraph() {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const fitted = await fitView({ padding: 0.2, duration: 0 });
+    if (fitted) {
+      flowWrap.value?.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    await new Promise(resolve => window.setTimeout(resolve, 80));
+  }
+  const list = nodes.value;
+  const box = flowWrap.value;
+  if (!list.length || !box) return;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  list.forEach(node => {
+    minX = Math.min(minX, node.position.x);
+    minY = Math.min(minY, node.position.y);
+    maxX = Math.max(maxX, node.position.x + 168);
+    maxY = Math.max(maxY, node.position.y + 64);
   });
+  const width = box.clientWidth || 640;
+  const height = box.clientHeight || 420;
+  const boundsW = Math.max(1, maxX - minX);
+  const boundsH = Math.max(1, maxY - minY);
+  const zoom = Math.min((width * 0.84) / boundsW, (height * 0.84) / boundsH, 1.25);
+  await setViewport({
+    x: (width - boundsW * zoom) / 2 - minX * zoom,
+    y: (height - boundsH * zoom) / 2 - minY * zoom,
+    zoom
+  });
+  box.scrollIntoView({ block: 'nearest' });
 }
 
 function addNode(type: string, position?: { x: number; y: number }) {
@@ -482,7 +510,7 @@ function autoLayout() {
     const pos = graph.node(node.id);
     return { ...node, position: { x: pos.x - 84, y: pos.y - 32 } };
   });
-  nextTick(() => fitView({ padding: 0.2 }));
+  nextTick(() => fitGraph());
 }
 
 async function createDraft(copyFrom?: number) {
@@ -760,6 +788,8 @@ onUnmounted(() => flowObserver?.disconnect());
             :nodes-draggable="editable"
             :nodes-connectable="editable"
             :elements-selectable="true"
+            :min-zoom="0.1"
+            :max-zoom="1.5"
             fit-view-on-init
             @nodes-initialized="fitGraph"
             @connect="onConnect"
