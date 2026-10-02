@@ -617,6 +617,7 @@ const local: App.I18n.Schema = {
         line: '产线',
         chambers: '腔室数',
         openLots: '在制批次',
+        back: '返回台账',
         capability: '可加工能力',
         anyCapability: '未配置，按设备组放行',
         anyRecipe: '任意配方',

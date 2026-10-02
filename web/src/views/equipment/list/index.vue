@@ -189,7 +189,17 @@ const columns = computed<DataTableColumns<EquipmentRow>>(() => [
                 size: 'small',
                 onClick: () => {
                   stateTarget.value = row;
-                  stateForm.toState = row.status === 'productive' ? 'unscheduled_down' : 'standby';
+                  const next: Record<string, string> = {
+                    standby: 'engineering',
+                    engineering: 'standby',
+                    scheduled_down: 'standby',
+                    unscheduled_down: 'standby',
+                    non_scheduled: 'standby',
+                    productive: 'unscheduled_down'
+                  };
+                  stateForm.toState = next[row.status] || 'standby';
+                  stateForm.reasonCode = row.status === 'productive' ? 'BREAKDOWN' : row.status === 'engineering' ? 'ENG_DONE' : 'ENG_SETUP';
+                  stateForm.reason = '';
                   stateOpen.value = true;
                 }
               },

@@ -621,6 +621,7 @@ const local: App.I18n.Schema = {
         line: 'Line',
         chambers: 'Chambers',
         openLots: 'Open lots',
+        back: 'Back to ledger',
         capability: 'Capability',
         anyCapability: 'Not set. The equipment group alone allows track in.',
         anyRecipe: 'Any recipe',

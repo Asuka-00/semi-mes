@@ -840,6 +840,7 @@ declare namespace App {
             line: string;
             chambers: string;
             openLots: string;
+            back: string;
             capability: string;
             anyCapability: string;
             anyRecipe: string;

@@ -55,7 +55,7 @@ watch(id, load);
 
 <template>
   <NCard :bordered="false" class="card-wrapper" :title="equipment?.equipmentCode || $t('route.equipment_detail')">
-    <NButton class="mb-12px" @click="router.push({ name: 'equipment_list' })">{{ $t('page.mes.wip.back') }}</NButton>
+    <NButton class="mb-12px" @click="router.push({ name: 'equipment_list' })">{{ $t('page.mes.eqp.back') }}</NButton>
     <NSpace v-if="equipment" class="mb-16px">
       <NTag type="info">{{ equipment.equipmentName }}</NTag>
       <NTag>{{ stateLabel(equipment.status) }}</NTag>
