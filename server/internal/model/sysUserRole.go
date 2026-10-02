@@ -2,15 +2,17 @@ package model
 
 import (
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type SysUserRole struct {
-	ID        uint64     `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
-	UserID    int        `gorm:"column:user_id;type:int(11);not null" json:"userID"`
-	RoleID    int        `gorm:"column:role_id;type:int(11);not null" json:"roleID"`
-	CreatedAt *time.Time `gorm:"column:created_at;type:datetime" json:"createdAt"`
-	UpdatedAt *time.Time `gorm:"column:updated_at;type:datetime" json:"updatedAt"`
-	DeletedAt *time.Time `gorm:"column:deleted_at;type:datetime" json:"deletedAt"`
+	ID        uint64         `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
+	UserID    int            `gorm:"column:user_id;type:integer;not null" json:"userID"`
+	RoleID    int            `gorm:"column:role_id;type:integer;not null" json:"roleID"`
+	CreatedAt *time.Time     `gorm:"column:created_at;type:timestamp" json:"createdAt"`
+	UpdatedAt *time.Time     `gorm:"column:updated_at;type:timestamp" json:"updatedAt"`
+	DeletedAt gorm.DeletedAt `gorm:"column:deleted_at;index" json:"-"`
 }
 
 // TableName table name
@@ -27,5 +29,3 @@ var SysUserRoleColumnNames = map[string]bool{
 	"updated_at": true,
 	"deleted_at": true,
 }
-
-

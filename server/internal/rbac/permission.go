@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-dev-frame/sponge/pkg/jwt"
 
+	"semi-mes/server/internal/config"
 	"semi-mes/server/internal/database"
 	"semi-mes/server/internal/i18n"
 )
@@ -49,6 +50,11 @@ func RequirePermission() gin.HandlerFunc {
 		code := permissionCode(c.Request.Method, c.FullPath())
 		if code == "" {
 			c.Next()
+			return
+		}
+		if strings.HasPrefix(code, "qc:spc") && !config.SPCEnabled() {
+			c.JSON(http.StatusOK, gin.H{"code": 40003, "msg": i18n.T(c, "error.auth.forbidden"), "data": struct{}{}})
+			c.Abort()
 			return
 		}
 		raw, exists := c.Get("claims")
@@ -130,8 +136,8 @@ func UserHasPermission(userID uint64, code string) (bool, error) {
 	db := database.GetDB()
 	var roleCodes []string
 	if err := db.Table("sys_user_role ur").
-		Joins("JOIN sys_role r ON r.id = ur.role_id").
-		Where("ur.user_id = ? AND r.status = 1", userID).
+		Joins("JOIN sys_role r ON r.id = ur.role_id AND r.deleted_at IS NULL").
+		Where("ur.user_id = ? AND ur.deleted_at IS NULL AND r.status = 1", userID).
 		Pluck("r.role_code", &roleCodes).Error; err != nil {
 		return false, err
 	}
@@ -142,9 +148,9 @@ func UserHasPermission(userID uint64, code string) (bool, error) {
 	}
 	var count int64
 	err := db.Table("sys_user_role ur").
-		Joins("JOIN sys_role_menu rm ON rm.role_id = ur.role_id").
-		Joins("JOIN sys_menu m ON m.id = rm.menu_id").
-		Where("ur.user_id = ? AND m.permission_code = ? AND m.status = 1", userID, code).
+		Joins("JOIN sys_role_menu rm ON rm.role_id = ur.role_id AND rm.deleted_at IS NULL").
+		Joins("JOIN sys_menu m ON m.id = rm.menu_id AND m.deleted_at IS NULL").
+		Where("ur.user_id = ? AND ur.deleted_at IS NULL AND m.permission_code = ? AND m.status = 1", userID, code).
 		Count(&count).Error
 	return count > 0, err
 }

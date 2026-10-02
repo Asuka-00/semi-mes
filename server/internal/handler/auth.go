@@ -2,6 +2,7 @@ package handler
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-dev-frame/sponge/pkg/gin/response"
@@ -122,22 +123,23 @@ func (h *authHandler) UserInfo(c *gin.Context) {
 	}
 	var roles []string
 	if err := database.GetDB().Table("sys_user_role ur").
-		Joins("JOIN sys_role r ON r.id = ur.role_id").
-		Where("ur.user_id = ? AND r.status = 1", userID).
+		Joins("JOIN sys_role r ON r.id = ur.role_id AND r.deleted_at IS NULL").
+		Where("ur.user_id = ? AND ur.deleted_at IS NULL AND r.status = 1", userID).
 		Pluck("r.role_code", &roles).Error; err != nil {
 		fail(c, 50000, "error.server.internal")
 		return
 	}
 	var buttons []string
 	if err := database.GetDB().Table("sys_menu m").
-		Joins("JOIN sys_role_menu rm ON rm.menu_id = m.id").
-		Joins("JOIN sys_user_role ur ON ur.role_id = rm.role_id").
-		Where("ur.user_id = ? AND m.status = 1 AND m.menu_type = 3 AND m.permission_code <> ''", userID).
+		Joins("JOIN sys_role_menu rm ON rm.menu_id = m.id AND rm.deleted_at IS NULL").
+		Joins("JOIN sys_user_role ur ON ur.role_id = rm.role_id AND ur.deleted_at IS NULL").
+		Where("ur.user_id = ? AND m.deleted_at IS NULL AND m.status = 1 AND m.menu_type = 3 AND m.permission_code <> ''", userID).
 		Distinct().
 		Pluck("m.permission_code", &buttons).Error; err != nil {
 		fail(c, 50000, "error.server.internal")
 		return
 	}
+	buttons = withoutSPC(buttons)
 	if buttons == nil {
 		buttons = []string{}
 	}
@@ -161,15 +163,16 @@ func (h *authHandler) UserRoutes(c *gin.Context) {
 	var menus []model.SysMenu
 	err := database.GetDB().Table("sys_menu m").
 		Select("DISTINCT m.*").
-		Joins("JOIN sys_role_menu rm ON rm.menu_id = m.id").
-		Joins("JOIN sys_user_role ur ON ur.role_id = rm.role_id").
-		Where("ur.user_id = ? AND m.status = 1 AND m.menu_type IN (1, 2)", userID).
+		Joins("JOIN sys_role_menu rm ON rm.menu_id = m.id AND rm.deleted_at IS NULL").
+		Joins("JOIN sys_user_role ur ON ur.role_id = rm.role_id AND ur.deleted_at IS NULL").
+		Where("ur.user_id = ? AND m.deleted_at IS NULL AND m.status = 1 AND m.menu_type IN (1, 2)", userID).
 		Order("m.sort_order ASC, m.id ASC").
 		Find(&menus).Error
 	if err != nil {
 		fail(c, 50000, "error.server.internal")
 		return
 	}
+	menus = filterSPCMenus(menus)
 	routes := buildRoutes(menus, 0)
 	if routes == nil {
 		routes = []elegantRoute{}
@@ -195,6 +198,10 @@ func (h *authHandler) ConstantRoutes(c *gin.Context) {
 
 func (h *authHandler) RouteExist(c *gin.Context) {
 	name := c.Query("routeName")
+	if !config.SPCEnabled() && name == "quality_spc" {
+		response.Success(c, false)
+		return
+	}
 	userID, ok := currentUserID(c)
 	if !ok {
 		response.Success(c, false)
@@ -202,11 +209,39 @@ func (h *authHandler) RouteExist(c *gin.Context) {
 	}
 	var count int64
 	_ = database.GetDB().Table("sys_menu m").
-		Joins("JOIN sys_role_menu rm ON rm.menu_id = m.id").
-		Joins("JOIN sys_user_role ur ON ur.role_id = rm.role_id").
-		Where("ur.user_id = ? AND m.route_name = ? AND m.status = 1", userID, name).
+		Joins("JOIN sys_role_menu rm ON rm.menu_id = m.id AND rm.deleted_at IS NULL").
+		Joins("JOIN sys_user_role ur ON ur.role_id = rm.role_id AND ur.deleted_at IS NULL").
+		Where("ur.user_id = ? AND m.deleted_at IS NULL AND m.route_name = ? AND m.status = 1", userID, name).
 		Count(&count).Error
 	response.Success(c, count > 0)
+}
+
+func withoutSPC(buttons []string) []string {
+	if config.SPCEnabled() || len(buttons) == 0 {
+		return buttons
+	}
+	kept := make([]string, 0, len(buttons))
+	for _, code := range buttons {
+		if strings.HasPrefix(code, "qc:spc") {
+			continue
+		}
+		kept = append(kept, code)
+	}
+	return kept
+}
+
+func filterSPCMenus(menus []model.SysMenu) []model.SysMenu {
+	if config.SPCEnabled() {
+		return menus
+	}
+	kept := make([]model.SysMenu, 0, len(menus))
+	for _, menu := range menus {
+		if menu.RouteName == "quality_spc" || strings.HasPrefix(menu.PermissionCode, "qc:spc") {
+			continue
+		}
+		kept = append(kept, menu)
+	}
+	return kept
 }
 
 func constantMeta(title, key string) map[string]any {

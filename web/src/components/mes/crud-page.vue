@@ -244,7 +244,7 @@ function payloadFrom(fields: MesField[], model: Record<string, any>, editing: bo
 }
 
 function searchColumns() {
-  const columns = props.fields
+  const filters = props.fields
     .filter(field => field.search && field.searchColumn)
     .flatMap(field => {
       const value = searchModel[field.key];
@@ -259,7 +259,7 @@ function searchColumns() {
         }
       ];
     });
-  return columns;
+  return filters;
 }
 
 async function loadOptions() {
@@ -292,12 +292,12 @@ async function loadOptions() {
 
 async function loadList() {
   loading.value = true;
-  const columns = searchColumns();
+  const filters = searchColumns();
   const { data, error } = await mesList(props.resource, {
     page: page.value - 1,
     limit: pageSize.value,
     sort: '-id',
-    columns: columns.length ? columns : undefined
+    columns: filters.length ? filters : undefined
   });
   loading.value = false;
   if (error || !data) return;

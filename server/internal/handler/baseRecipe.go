@@ -232,7 +232,7 @@ func (h *baseRecipeHandler) List(c *gin.Context) {
 
 	response.Success(c, gin.H{
 		"baseRecipes": data,
-		"total":        total,
+		"total":       total,
 	})
 }
 

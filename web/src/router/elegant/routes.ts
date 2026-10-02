@@ -246,24 +246,6 @@ export const generatedRoutes: GeneratedRoute[] = [
     },
     children: [
       {
-        name: 'quality_inspection',
-        path: '/quality/inspection',
-        component: 'view.quality_inspection',
-        meta: {
-          title: 'quality_inspection',
-          i18nKey: 'route.quality_inspection'
-        }
-      },
-      {
-        name: 'quality_plan',
-        path: '/quality/plan',
-        component: 'view.quality_plan',
-        meta: {
-          title: 'quality_plan',
-          i18nKey: 'route.quality_plan'
-        }
-      },
-      {
         name: 'quality_defect',
         path: '/quality/defect',
         component: 'view.quality_defect',
@@ -273,12 +255,30 @@ export const generatedRoutes: GeneratedRoute[] = [
         }
       },
       {
+        name: 'quality_inspection',
+        path: '/quality/inspection',
+        component: 'view.quality_inspection',
+        meta: {
+          title: 'quality_inspection',
+          i18nKey: 'route.quality_inspection'
+        }
+      },
+      {
         name: 'quality_pareto',
         path: '/quality/pareto',
         component: 'view.quality_pareto',
         meta: {
           title: 'quality_pareto',
           i18nKey: 'route.quality_pareto'
+        }
+      },
+      {
+        name: 'quality_plan',
+        path: '/quality/plan',
+        component: 'view.quality_plan',
+        meta: {
+          title: 'quality_plan',
+          i18nKey: 'route.quality_plan'
         }
       },
       {

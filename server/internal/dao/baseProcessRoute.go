@@ -34,7 +34,7 @@ type BaseProcessRouteDao interface {
 type baseProcessRouteDao struct {
 	db    *gorm.DB
 	cache cache.BaseProcessRouteCache // if nil, the cache is not used.
-	sfg   *singleflight.Group    // if cache is nil, the sfg is not used.
+	sfg   *singleflight.Group         // if cache is nil, the sfg is not used.
 }
 
 // NewBaseProcessRouteDao creating the dao interface
@@ -90,7 +90,7 @@ func (d *baseProcessRouteDao) updateDataByID(ctx context.Context, db *gorm.DB, t
 	}
 
 	update := map[string]interface{}{}
-	
+
 	if table.ProductID != 0 {
 		update["product_id"] = table.ProductID
 	}
@@ -110,7 +110,6 @@ func (d *baseProcessRouteDao) updateDataByID(ctx context.Context, db *gorm.DB, t
 	if table.Status != 0 {
 		update["status"] = table.Status
 	}
-	
 
 	return db.WithContext(ctx).Model(table).Updates(update).Error
 }

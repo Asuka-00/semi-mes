@@ -34,7 +34,7 @@ type BaseProductionLineDao interface {
 type baseProductionLineDao struct {
 	db    *gorm.DB
 	cache cache.BaseProductionLineCache // if nil, the cache is not used.
-	sfg   *singleflight.Group    // if cache is nil, the sfg is not used.
+	sfg   *singleflight.Group           // if cache is nil, the sfg is not used.
 }
 
 // NewBaseProductionLineDao creating the dao interface
@@ -90,7 +90,7 @@ func (d *baseProductionLineDao) updateDataByID(ctx context.Context, db *gorm.DB,
 	}
 
 	update := map[string]interface{}{}
-	
+
 	if table.WorkshopID != 0 {
 		update["workshop_id"] = table.WorkshopID
 	}
@@ -107,7 +107,6 @@ func (d *baseProductionLineDao) updateDataByID(ctx context.Context, db *gorm.DB,
 	if table.Status != 0 {
 		update["status"] = table.Status
 	}
-	
 
 	return db.WithContext(ctx).Model(table).Updates(update).Error
 }

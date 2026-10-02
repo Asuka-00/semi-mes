@@ -90,7 +90,7 @@ func (d *baseFactoryDao) updateDataByID(ctx context.Context, db *gorm.DB, table 
 	}
 
 	update := map[string]interface{}{}
-	
+
 	if table.FactoryCode != "" {
 		update["factory_code"] = table.FactoryCode
 	}
@@ -109,7 +109,6 @@ func (d *baseFactoryDao) updateDataByID(ctx context.Context, db *gorm.DB, table 
 	if table.Status != 0 {
 		update["status"] = table.Status
 	}
-	
 
 	return db.WithContext(ctx).Model(table).Updates(update).Error
 }

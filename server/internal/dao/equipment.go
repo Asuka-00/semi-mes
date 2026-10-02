@@ -530,6 +530,15 @@ func EnsurePmTasks(db *gorm.DB) error {
 			if err := db.Create(&task).Error; err != nil {
 				return err
 			}
+			kind := model.NoticePmDue
+			if status == model.PmOverdue {
+				kind = model.NoticePmOverdue
+			}
+			if err := notifyUsers(db, kind, map[string]string{
+				"eqpCode": eqp.EquipmentCode, "planName": plan.PlanName,
+			}, "pm_task", task.ID); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -549,9 +558,21 @@ func planDue(plan *model.EqpPmPlan, now time.Time) bool {
 }
 
 func markOverdue(db *gorm.DB, planID, equipmentID uint64, now time.Time) error {
-	return db.Model(&model.EqpPmTask{}).
+	res := db.Model(&model.EqpPmTask{}).
 		Where("plan_id = ? AND equipment_id = ? AND status = ? AND due_at < ?", planID, equipmentID, model.PmDue, now).
-		Update("status", model.PmOverdue).Error
+		Update("status", model.PmOverdue)
+	if res.Error != nil || res.RowsAffected == 0 {
+		return res.Error
+	}
+	var eqp model.EqpEquipment
+	if err := db.First(&eqp, equipmentID).Error; err != nil {
+		return err
+	}
+	var plan model.EqpPmPlan
+	_ = db.First(&plan, planID).Error
+	return notifyUsers(db, model.NoticePmOverdue, map[string]string{
+		"eqpCode": eqp.EquipmentCode, "planName": plan.PlanName,
+	}, "equipment", eqp.ID)
 }
 
 func planTargets(db *gorm.DB, plan *model.EqpPmPlan) ([]model.EqpEquipment, error) {
@@ -889,6 +910,11 @@ func applyState(tx *gorm.DB, eqp *model.EqpEquipment, to, reasonCode, reason str
 		return err
 	}
 	eqp.Status = to
+	if to == model.EqpUnscheduledDown && from != to {
+		return notifyUsers(tx, model.NoticeEqpDown, map[string]string{
+			"eqpCode": eqp.EquipmentCode, "reason": reason, "reasonCode": reasonCode,
+		}, "equipment", eqp.ID)
+	}
 	return nil
 }
 

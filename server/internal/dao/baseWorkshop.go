@@ -34,7 +34,7 @@ type BaseWorkshopDao interface {
 type baseWorkshopDao struct {
 	db    *gorm.DB
 	cache cache.BaseWorkshopCache // if nil, the cache is not used.
-	sfg   *singleflight.Group    // if cache is nil, the sfg is not used.
+	sfg   *singleflight.Group     // if cache is nil, the sfg is not used.
 }
 
 // NewBaseWorkshopDao creating the dao interface
@@ -90,7 +90,7 @@ func (d *baseWorkshopDao) updateDataByID(ctx context.Context, db *gorm.DB, table
 	}
 
 	update := map[string]interface{}{}
-	
+
 	if table.FactoryID != 0 {
 		update["factory_id"] = table.FactoryID
 	}
@@ -109,7 +109,6 @@ func (d *baseWorkshopDao) updateDataByID(ctx context.Context, db *gorm.DB, table
 	if table.Status != 0 {
 		update["status"] = table.Status
 	}
-	
 
 	return db.WithContext(ctx).Model(table).Updates(update).Error
 }

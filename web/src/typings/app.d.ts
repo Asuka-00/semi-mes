@@ -893,6 +893,7 @@ declare namespace App {
             defect: string;
             pareto: string;
             spc: string;
+            spcOff: string;
             param: string;
             paramName: string;
             unit: string;
@@ -937,6 +938,11 @@ declare namespace App {
         email: FormMsg;
       };
       dropdown: Record<Global.DropdownKey, string>;
+      notice: {
+        title: string;
+        empty: string;
+        markAll: string;
+      };
       icon: {
         themeConfig: string;
         themeSchema: string;

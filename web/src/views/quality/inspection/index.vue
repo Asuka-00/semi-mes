@@ -4,7 +4,6 @@ import { useAuth } from '@/hooks/business/auth';
 import { $t } from '@/locales';
 import { recordMeasurement } from '@/service/api/quality';
 import { fetchStation } from '@/service/api/track';
-import type { InspectPlan } from '@/service/api/quality';
 import type { StationView } from '@/service/api/track';
 
 const { hasAuth } = useAuth();
@@ -26,7 +25,9 @@ async function load() {
   }
   station.value = data;
   equipmentId.value = data.equipment[0]?.id ?? data.openMove?.equipmentID ?? null;
-  Object.keys(values).forEach(key => delete values[key]);
+  for (const key of Object.keys(values)) {
+    Reflect.deleteProperty(values, key);
+  }
   (data.inspectPlan?.items || []).forEach(item => {
     values[item.paramCode] = Array.from({ length: item.sampleSize || 1 }, () => item.target ?? 0);
   });

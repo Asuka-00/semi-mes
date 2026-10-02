@@ -8,15 +8,15 @@ import (
 
 type BaseProcessRoute struct {
 	ID          uint64         `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
-	ProductID   int            `gorm:"column:product_id;type:int(11);not null" json:"productID"`
+	ProductID   int            `gorm:"column:product_id;type:integer;not null" json:"productID"`
 	RouteCode   string         `gorm:"column:route_code;type:text;not null" json:"routeCode"`
 	RouteName   string         `gorm:"column:route_name;type:text;not null" json:"routeName"`
 	Version     string         `gorm:"column:version;type:text" json:"version"`
-	IsDefault   int            `gorm:"column:is_default;type:int(11);not null" json:"isDefault"`
+	IsDefault   int            `gorm:"column:is_default;type:integer;not null" json:"isDefault"`
 	Description string         `gorm:"column:description;type:text" json:"description"`
-	Status      int            `gorm:"column:status;type:int(11);not null" json:"status"`
-	CreatedAt   *time.Time     `gorm:"column:created_at;type:datetime" json:"createdAt"`
-	UpdatedAt   *time.Time     `gorm:"column:updated_at;type:datetime" json:"updatedAt"`
+	Status      int            `gorm:"column:status;type:integer;not null" json:"status"`
+	CreatedAt   *time.Time     `gorm:"column:created_at;type:timestamp" json:"createdAt"`
+	UpdatedAt   *time.Time     `gorm:"column:updated_at;type:timestamp" json:"updatedAt"`
 	DeletedAt   gorm.DeletedAt `gorm:"column:deleted_at;index" json:"-"`
 }
 

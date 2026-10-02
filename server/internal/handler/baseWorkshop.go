@@ -232,7 +232,7 @@ func (h *baseWorkshopHandler) List(c *gin.Context) {
 
 	response.Success(c, gin.H{
 		"baseWorkshops": data,
-		"total":        total,
+		"total":         total,
 	})
 }
 

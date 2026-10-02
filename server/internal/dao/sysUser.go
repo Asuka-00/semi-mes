@@ -33,8 +33,8 @@ type SysUserDao interface {
 
 type sysUserDao struct {
 	db    *gorm.DB
-	cache cache.SysUserCache // if nil, the cache is not used.
-	sfg   *singleflight.Group    // if cache is nil, the sfg is not used.
+	cache cache.SysUserCache  // if nil, the cache is not used.
+	sfg   *singleflight.Group // if cache is nil, the sfg is not used.
 }
 
 // NewSysUserDao creating the dao interface
@@ -58,6 +58,9 @@ func (d *sysUserDao) deleteCache(ctx context.Context, id uint64) error {
 
 // Create a new sysUser, insert the record and the id value is written back to the table
 func (d *sysUserDao) Create(ctx context.Context, table *model.SysUser) error {
+	if err := rejectActiveUser(d.db.WithContext(ctx), table.Username, 0); err != nil {
+		return err
+	}
 	return d.db.WithContext(ctx).Create(table).Error
 }
 
@@ -90,8 +93,11 @@ func (d *sysUserDao) updateDataByID(ctx context.Context, db *gorm.DB, table *mod
 	}
 
 	update := map[string]interface{}{}
-	
+
 	if table.Username != "" {
+		if err := rejectActiveUser(db.WithContext(ctx), table.Username, table.ID); err != nil {
+			return err
+		}
 		update["username"] = table.Username
 	}
 	if table.Password != "" {
@@ -109,7 +115,6 @@ func (d *sysUserDao) updateDataByID(ctx context.Context, db *gorm.DB, table *mod
 	if table.Status != 0 {
 		update["status"] = table.Status
 	}
-	
 
 	return db.WithContext(ctx).Model(table).Updates(update).Error
 }
@@ -199,6 +204,9 @@ func (d *sysUserDao) GetByColumns(ctx context.Context, params *query.Params) ([]
 
 // CreateByTx create a record in the database using the provided transaction
 func (d *sysUserDao) CreateByTx(ctx context.Context, tx *gorm.DB, table *model.SysUser) (uint64, error) {
+	if err := rejectActiveUser(tx.WithContext(ctx), table.Username, 0); err != nil {
+		return 0, err
+	}
 	err := tx.WithContext(ctx).Create(table).Error
 	return table.ID, err
 }

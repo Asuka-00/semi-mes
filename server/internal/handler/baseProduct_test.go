@@ -103,7 +103,7 @@ func Test_baseProductHandler_Create(t *testing.T) {
 	}
 
 	t.Logf("%+v", result)
-	
+
 }
 
 func Test_baseProductHandler_DeleteByID(t *testing.T) {

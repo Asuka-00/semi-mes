@@ -42,9 +42,11 @@ func Test_sysMenuDao_Create(t *testing.T) {
 	defer d.Close()
 	testData := d.TestData.(*model.SysMenu)
 
+	insertArgs := d.GetAnyArgs(testData)
+	insertArgs = insertArgs[:len(insertArgs)-1] // gorm.DeletedAt is one column but reflects as two fields
 	d.SQLMock.ExpectBegin()
 	d.SQLMock.ExpectExec("INSERT INTO .*").
-		WithArgs(d.GetAnyArgs(testData)...).
+		WithArgs(insertArgs...).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	d.SQLMock.ExpectCommit()
 
@@ -58,12 +60,11 @@ func Test_sysMenuDao_DeleteByID(t *testing.T) {
 	d := newSysMenuDao()
 	defer d.Close()
 	testData := d.TestData.(*model.SysMenu)
-	expectedSQLForDeletion := "DELETE .*"
-	
+	expectedSQLForDeletion := "UPDATE .*"
 
 	d.SQLMock.ExpectBegin()
 	d.SQLMock.ExpectExec(expectedSQLForDeletion).
-		WithArgs(testData.ID).
+		WithArgs(d.AnyTime, testData.ID).
 		WillReturnResult(sqlmock.NewResult(int64(testData.ID), 1))
 	d.SQLMock.ExpectCommit()
 
@@ -95,7 +96,7 @@ func Test_sysMenuDao_UpdateByID(t *testing.T) {
 	// zero id error
 	err = d.IDao.(SysMenuDao).UpdateByID(d.Ctx, &model.SysMenu{})
 	assert.Error(t, err)
-	
+
 }
 
 func Test_sysMenuDao_GetByID(t *testing.T) {
@@ -185,9 +186,11 @@ func Test_sysMenuDao_CreateByTx(t *testing.T) {
 	defer d.Close()
 	testData := d.TestData.(*model.SysMenu)
 
+	insertArgs := d.GetAnyArgs(testData)
+	insertArgs = insertArgs[:len(insertArgs)-1] // gorm.DeletedAt is one column but reflects as two fields
 	d.SQLMock.ExpectBegin()
 	d.SQLMock.ExpectExec("INSERT INTO .*").
-		WithArgs(d.GetAnyArgs(testData)...).
+		WithArgs(insertArgs...).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	d.SQLMock.ExpectCommit()
 
@@ -201,12 +204,11 @@ func Test_sysMenuDao_DeleteByTx(t *testing.T) {
 	d := newSysMenuDao()
 	defer d.Close()
 	testData := d.TestData.(*model.SysMenu)
-	expectedSQLForDeletion := "DELETE .*"
-	
+	expectedSQLForDeletion := "UPDATE .*"
 
 	d.SQLMock.ExpectBegin()
 	d.SQLMock.ExpectExec(expectedSQLForDeletion).
-		WithArgs(testData.ID).
+		WithArgs(d.AnyTime, testData.ID).
 		WillReturnResult(sqlmock.NewResult(int64(testData.ID), 1))
 	d.SQLMock.ExpectCommit()
 

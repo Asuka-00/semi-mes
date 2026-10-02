@@ -8,6 +8,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"semi-mes/server/internal/config"
 	"semi-mes/server/internal/model"
 )
 
@@ -349,6 +350,9 @@ func LatestJudgement(db *gorm.DB, lotID uint64) (string, error) {
 }
 
 func evaluateParam(tx *gorm.DB, lot *model.WipLot, equipmentID, operationID uint64, newest model.QcMeasurement) error {
+	if !config.SPCEnabled() {
+		return nil
+	}
 	var history []model.QcMeasurement
 	q := tx.Where("param_code = ? AND operation_id = ?", newest.ParamCode, operationID).Order("id")
 	if equipmentID > 0 {
@@ -437,6 +441,9 @@ func applyReaction(tx *gorm.DB, lot *model.WipLot, equipmentID uint64, reaction 
 			LotID: lot.ID, EventType: model.EventHold, FromNodeKey: lot.CurrentNodeKey, ToNodeKey: lot.CurrentNodeKey,
 			ReasonCode: "OOC", Reason: "SPC", Quantity: lot.Quantity,
 		}).Error; err != nil {
+			return err
+		}
+		if err := notifyLot(tx, lot, model.NoticeLotHold); err != nil {
 			return err
 		}
 	}
@@ -782,11 +789,11 @@ func RecordDefect(db *gorm.DB, in DefectInput) (*model.QcDefect, error) {
 			}).Error; err != nil {
 				return err
 			}
+			if err := notifyLot(tx, lot, model.NoticeLotHold); err != nil {
+				return err
+			}
 		case model.DispositionRework:
-			if err := tx.Create(&model.WipLotHistory{
-				LotID: lot.ID, EventType: "rework", FromNodeKey: node, ToNodeKey: node,
-				ReasonCode: in.DefectCode, Reason: in.Note, Quantity: in.Quantity,
-			}).Error; err != nil {
+			if err := reworkLot(tx, lot, in.DefectCode, in.Note); err != nil {
 				return err
 			}
 		default:

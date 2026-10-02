@@ -147,13 +147,13 @@ func TestQualityRulesReactionDefectsPermissions(t *testing.T) {
 	_, rework := doJSON(http.MethodPost, "/api/v1/qcDefect", token, map[string]any{
 		"lotId": lotScrap, "defectCode": "PATTERN", "quantity": 1, "disposition": "rework", "note": "图形",
 	})
-	if rework["code"] != float64(0) {
-		t.Fatalf("rework: %+v", rework)
+	if rework["code"] == float64(0) {
+		t.Fatalf("rework at clean has no rework edge: %+v", rework)
 	}
 	_, reworkLot := doJSON(http.MethodGet, "/api/v1/wipLot/"+uintToID(lotScrap), token, nil)
 	reworkRow := reworkLot["data"].(map[string]any)["lot"].(map[string]any)
-	if reworkRow["currentNodeKey"] != "clean" || reworkRow["status"] != "waiting" || !hasEvent(reworkLot["data"].(map[string]any)["history"].([]any), "rework") {
-		t.Fatalf("rework stays on the node: %+v", reworkRow)
+	if reworkRow["currentNodeKey"] != "clean" || reworkRow["status"] != "waiting" {
+		t.Fatalf("rejected rework must stay on clean: %+v", reworkRow)
 	}
 	lotHold, _ := startCleanLot(t, token, "WO-QC-HOLD")
 	_, heldDefect := doJSON(http.MethodPost, "/api/v1/qcDefect", token, map[string]any{

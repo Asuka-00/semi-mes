@@ -37,6 +37,7 @@
     "fmt": "oxfmt",
     "gen-route": "sa gen-route",
     "lint": "oxlint --fix && eslint --fix .",
+    "lint:ci": "oxlint && eslint .",
     "prepare": "simple-git-hooks",
     "preview": "vite preview",
     "release": "sa release",

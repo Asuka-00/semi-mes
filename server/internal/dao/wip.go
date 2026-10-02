@@ -358,6 +358,9 @@ func HoldLot(db *gorm.DB, id uint64, reasonCode, reason string) (*model.WipLot, 
 		}).Error; err != nil {
 			return err
 		}
+		if err := notifyLot(tx, lot, model.NoticeLotHold); err != nil {
+			return err
+		}
 		updated = lot
 		return nil
 	})
@@ -569,7 +572,87 @@ func moveLot(tx *gorm.DB, lot *model.WipLot, in AdvanceInput, eventName string) 
 		}
 		return routegraph.Result{}, err
 	}
-	from := lot.CurrentNodeKey
+	return applyResolved(tx, lot, graph, lot.CurrentNodeKey, ctx, result, eventName, "")
+}
+
+// reworkLot moves the lot along the route rework edge, or holds it when the max count is reached.
+// A lot sitting on the operation just before a decision uses that decision's rework edge.
+func reworkLot(tx *gorm.DB, lot *model.WipLot, defectCode, note string) error {
+	graph, err := LoadRouteGraph(tx, lot.RouteVersionID)
+	if err != nil {
+		return err
+	}
+	var product model.BaseProduct
+	if err := tx.First(&product, lot.ProductID).Error; err != nil {
+		return err
+	}
+	ctx := routegraph.LotContext{
+		InspectionResult: "fail",
+		DefectCode:       defectCode,
+		ProductCode:      product.ProductCode,
+		Priority:         float64(lot.Priority),
+		LotType:          lot.LotType,
+		ReworkCounts:     decodeRework(lot.ReworkJSON),
+	}
+	result, ok := pickRework(graph, lot.CurrentNodeKey, ctx)
+	if !ok {
+		return ErrQc
+	}
+	_, err = applyResolved(tx, lot, graph, lot.CurrentNodeKey, ctx, result, "rework", note)
+	return err
+}
+
+func pickRework(graph routegraph.Graph, from string, ctx routegraph.LotContext) (routegraph.Result, bool) {
+	if result, err := routegraph.Resolve(graph, from, ctx); err == nil && reworkResult(graph, result) {
+		return result, true
+	}
+	decision, ok := defaultDecision(graph, from)
+	if !ok {
+		return routegraph.Result{}, false
+	}
+	hopped, err := routegraph.Resolve(graph, decision, ctx)
+	if err != nil || !reworkResult(graph, hopped) {
+		return routegraph.Result{}, false
+	}
+	return hopped, true
+}
+
+func defaultDecision(graph routegraph.Graph, from string) (string, bool) {
+	var to string
+	n := 0
+	for _, edge := range graph.Edges {
+		if edge.From == from && edge.IsDefault {
+			to = edge.To
+			n++
+		}
+	}
+	if n != 1 {
+		return "", false
+	}
+	for _, node := range graph.Nodes {
+		if node.Key == to && node.Type == routegraph.NodeDecision {
+			return to, true
+		}
+	}
+	return "", false
+}
+
+func reworkResult(graph routegraph.Graph, result routegraph.Result) bool {
+	if result.Action == routegraph.ActionHold && result.Reason == routegraph.ReasonReworkExceeded && result.EdgeKey != "" {
+		return true
+	}
+	if result.Action != routegraph.ActionMove {
+		return false
+	}
+	for _, edge := range graph.Edges {
+		if edge.Key == result.EdgeKey && edge.Kind == routegraph.EdgeRework {
+			return true
+		}
+	}
+	return false
+}
+
+func applyResolved(tx *gorm.DB, lot *model.WipLot, graph routegraph.Graph, from string, ctx routegraph.LotContext, result routegraph.Result, eventName, note string) (routegraph.Result, error) {
 	switch result.Action {
 	case routegraph.ActionHold:
 		lot.Status = model.LotHold
@@ -580,11 +663,17 @@ func moveLot(tx *gorm.DB, lot *model.WipLot, in AdvanceInput, eventName string) 
 		}).Error; err != nil {
 			return result, err
 		}
-		err = tx.Create(&model.WipLotHistory{
+		if err := tx.Create(&model.WipLotHistory{
 			LotID: lot.ID, EventType: model.EventHold, FromNodeKey: from, ToNodeKey: from, EdgeKey: result.EdgeKey,
 			ReasonCode: lot.HoldReasonCode, Reason: result.Reason, Quantity: lot.Quantity,
-		}).Error
-		return result, err
+		}).Error; err != nil {
+			return result, err
+		}
+		kind := model.NoticeLotHold
+		if result.Reason == routegraph.ReasonReworkExceeded {
+			kind = model.NoticeReworkExceeded
+		}
+		return result, notifyLot(tx, lot, kind)
 	case routegraph.ActionEnd:
 		return result, completeLot(tx, lot, from, result)
 	case routegraph.ActionMove:
@@ -615,9 +704,13 @@ func moveLot(tx *gorm.DB, lot *model.WipLot, in AdvanceInput, eventName string) 
 		}).Error; err != nil {
 			return result, err
 		}
+		reason := result.Reason
+		if note != "" {
+			reason = note
+		}
 		if err := tx.Create(&model.WipLotHistory{
 			LotID: lot.ID, EventType: event, FromNodeKey: from, ToNodeKey: lot.CurrentNodeKey, EdgeKey: result.EdgeKey,
-			Reason: result.Reason, Quantity: lot.Quantity,
+			Reason: reason, Quantity: lot.Quantity,
 		}).Error; err != nil {
 			return result, err
 		}
