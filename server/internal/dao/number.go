@@ -1,6 +1,7 @@
 package dao
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -25,9 +26,17 @@ func Allocate(db *gorm.DB, ruleCode string, now time.Time) (string, error) {
 	}
 	period := periodKey(rule.ResetPeriod, now)
 	var last error
-	for attempt := 0; attempt < 12; attempt++ {
+	for attempt := 0; attempt < 16; attempt++ {
+		if attempt > 0 {
+			// Immediate retries livelock when several SQLite writers deadlock on the same sequence row.
+			delay := time.Duration(attempt) * 5 * time.Millisecond
+			if delay > 50*time.Millisecond {
+				delay = 50 * time.Millisecond
+			}
+			time.Sleep(delay)
+		}
 		issued := 0
-		err = db.Transaction(func(tx *gorm.DB) error {
+		err = allocateTx(db, func(tx *gorm.DB) error {
 			var seq model.SysNumberSeq
 			q := tx
 			if rowLock(tx) {
@@ -139,6 +148,51 @@ func datePart(part string, now time.Time) string {
 	default:
 		return now.Format("20060102")
 	}
+}
+
+// allocateTx reserves the sequence inside one transaction.
+// SQLite deferred transactions deadlock when two connections read the row and then both try to write it.
+// BEGIN IMMEDIATE takes the write lock before that read, so the other writer waits instead of deadlocking.
+func allocateTx(db *gorm.DB, fn func(tx *gorm.DB) error) error {
+	if db != nil && db.Dialector != nil && db.Dialector.Name() == "sqlite" && !inTx(db) {
+		return immediateSQLite(db, fn)
+	}
+	return db.Transaction(fn)
+}
+
+func inTx(db *gorm.DB) bool {
+	if db == nil || db.Statement == nil || db.Statement.ConnPool == nil {
+		return false
+	}
+	_, ok := db.Statement.ConnPool.(gorm.Tx)
+	return ok
+}
+
+func immediateSQLite(db *gorm.DB, fn func(tx *gorm.DB) error) error {
+	sqlDB, err := db.DB()
+	if err != nil {
+		return err
+	}
+	ctx := context.Background()
+	conn, err := sqlDB.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	if _, err = conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+		return err
+	}
+	sess := db.Session(&gorm.Session{Context: ctx, NewDB: true, SkipDefaultTransaction: true})
+	sess.Statement.ConnPool = conn
+	if err = fn(sess); err != nil {
+		_, _ = conn.ExecContext(ctx, "ROLLBACK")
+		return err
+	}
+	if _, err = conn.ExecContext(ctx, "COMMIT"); err != nil {
+		_, _ = conn.ExecContext(ctx, "ROLLBACK")
+		return err
+	}
+	return nil
 }
 
 func rowLock(db *gorm.DB) bool {
