@@ -591,6 +591,23 @@ declare namespace App {
           };
         };
         mes: {
+          query: {
+            collapse: string;
+            expand: string;
+            export: string;
+            columns: string;
+            createdRange: string;
+            sort: string;
+            batchDelete: string;
+            batchEnable: string;
+            batchDisable: string;
+            batchHold: string;
+            batchRelease: string;
+            selected: string;
+            exported: string;
+            exportEmpty: string;
+            partial: string;
+          };
           enabled: string;
           disabled: string;
           yes: string;

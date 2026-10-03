@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed, h, onMounted, reactive, ref } from 'vue';
 import type { VNode } from 'vue';
-import type { DataTableColumns, FormInst, FormRules } from 'naive-ui';
+import type { DataTableColumns, DataTableRowKey, FormInst, FormRules } from 'naive-ui';
 import { NButton, NPopconfirm, NSpace, NTag } from 'naive-ui';
+import ColumnPicker from '@/components/mes/column-picker.vue';
 import { useAuth } from '@/hooks/business/auth';
+import { downloadCsv, keepColumn, loadPagePref, moveKey, orderedKeys, rangeColumns, savePagePref } from '@/hooks/business/list-kit';
 import { $t } from '@/locales';
+import { mesBatch } from '@/service/api/mes';
 import {
   closeWorkOrder,
   fetchReleasedRoutes,
@@ -27,6 +30,15 @@ const total = ref(0);
 const page = ref(1);
 const pageSize = ref(10);
 const keyword = ref('');
+const statuses = ref<string[]>([]);
+const productCode = ref('');
+const dueRange = ref<[number, number] | null>(null);
+const sort = ref('-id');
+const collapsed = ref(false);
+const hidden = ref<string[]>([]);
+const columnOrder = ref<string[]>([]);
+const prefsReady = ref(false);
+const checked = ref<DataTableRowKey[]>([]);
 const versions = ref<ReleasedRoute[]>([]);
 
 const modal = ref(false);
@@ -91,7 +103,12 @@ function actionButton(label: string, onClick: () => void, type: 'default' | 'pri
   return h(NButton, { size: 'small', ghost: true, type, onClick }, { default: () => label });
 }
 
-const columns = computed<DataTableColumns<WorkOrderRow>>(() => [
+const dataColumnKeys = ['orderNo', 'productCode', 'routeCode', 'plannedQty', 'releasedQty', 'completedQty', 'priority', 'dueDateText', 'status'];
+
+const columns = computed<DataTableColumns<WorkOrderRow>>(() => {
+  const visible = new Set(orderedKeys(dataColumnKeys, columnOrder.value).filter(key => !hidden.value.includes(key)));
+  const all: DataTableColumns<WorkOrderRow> = [
+  { type: 'selection' },
   { title: $t('page.mes.wip.orderNo'), key: 'orderNo', minWidth: 140 },
   {
     title: $t('page.mes.wip.product'),
@@ -147,15 +164,37 @@ const columns = computed<DataTableColumns<WorkOrderRow>>(() => [
       return h(NSpace, { size: 8 }, { default: () => buttons });
     }
   }
-]);
+  ];
+  return all.filter(column => keepColumn(column, visible));
+});
+
+function filters() {
+  const query: Array<{ name: string; exp: string; value: string; logic: string }> = [];
+  if (keyword.value) query.push({ name: 'order_no', exp: 'like', value: keyword.value, logic: 'and' });
+  if (statuses.value.length) query.push({ name: 'status', exp: 'in', value: statuses.value.join(','), logic: 'and' });
+  if (productCode.value) query.push({ name: 'product_code', exp: 'like', value: productCode.value, logic: 'and' });
+  return [...query, ...rangeColumns('due_date', dueRange.value)];
+}
+
+async function persist() {
+  if (!prefsReady.value) return;
+  await savePagePref('wipWorkOrder', {
+    search: { keyword: keyword.value, statuses: statuses.value, productCode: productCode.value },
+    hidden: hidden.value,
+    order: columnOrder.value,
+    collapsed: collapsed.value,
+    sort: sort.value,
+    createdRange: dueRange.value
+  });
+}
 
 async function load() {
   loading.value = true;
   const { data, error } = await fetchWorkOrders({
     page: page.value - 1,
     limit: pageSize.value,
-    sort: '-id',
-    columns: keyword.value ? [{ name: 'order_no', exp: 'like', value: keyword.value, logic: 'and' }] : undefined
+    sort: sort.value,
+    columns: filters()
   });
   loading.value = false;
   if (error || !data) return;
@@ -165,6 +204,38 @@ async function load() {
 
 function search() {
   page.value = 1;
+  persist();
+  load();
+}
+
+function reset() {
+  keyword.value = '';
+  statuses.value = [];
+  productCode.value = '';
+  dueRange.value = null;
+  sort.value = '-id';
+  search();
+}
+
+async function exportRows() {
+  const { data, error } = await fetchWorkOrders({ page: 0, limit: 2000, sort: sort.value, columns: filters() });
+  if (error || !data?.wipWorkOrders?.length) {
+    window.$message?.warning($t('page.mes.query.exportEmpty'));
+    return;
+  }
+  downloadCsv(
+    'work-orders',
+    ['orderNo', 'productCode', 'status', 'plannedQty'],
+    data.wipWorkOrders.map(row => [row.orderNo, row.productCode, row.status, row.plannedQty])
+  );
+}
+
+async function batchDelete() {
+  const ids = checked.value.map(item => Number(item));
+  const { data, error } = await mesBatch({ resource: 'wipWorkOrder', action: 'delete', ids });
+  if (error || !data) return;
+  checked.value = [];
+  window.$message?.success($t('page.mes.query.partial', { ok: data.ok?.length || 0, failed: data.failed?.length || 0 }));
   load();
 }
 
@@ -255,6 +326,16 @@ function onPage(next: number) {
 }
 
 onMounted(async () => {
+  const pref = await loadPagePref('wipWorkOrder');
+  keyword.value = String(pref.search?.keyword || '');
+  statuses.value = Array.isArray(pref.search?.statuses) ? (pref.search.statuses as string[]) : [];
+  productCode.value = String(pref.search?.productCode || '');
+  hidden.value = pref.hidden || [];
+  columnOrder.value = pref.order || [...dataColumnKeys];
+  collapsed.value = Boolean(pref.collapsed);
+  sort.value = pref.sort || '-id';
+  dueRange.value = pref.createdRange || null;
+  prefsReady.value = true;
   const { data } = await fetchReleasedRoutes();
   versions.value = data?.versions || [];
   load();
@@ -263,15 +344,38 @@ onMounted(async () => {
 
 <template>
   <NCard :bordered="false" class="card-wrapper">
-    <NSpace class="mb-12px" justify="space-between">
-      <NSpace>
-        <NInput v-model:value="keyword" :placeholder="$t('page.mes.wip.orderNo')" clearable class="w-220px" @keyup.enter="search" />
-        <NButton @click="search">{{ $t('common.search') }}</NButton>
-      </NSpace>
+    <NSpace class="mb-12px" wrap>
+      <NButton @click="collapsed = !collapsed; persist()">{{ collapsed ? $t('page.mes.query.expand') : $t('page.mes.query.collapse') }}</NButton>
+      <NButton @click="exportRows">{{ $t('page.mes.query.export') }}</NButton>
+      <ColumnPicker
+        :items="orderedKeys(dataColumnKeys, columnOrder).map(key => ({ key, label: key }))"
+        :hidden="hidden"
+        @toggle="(key: string, shown: boolean) => { hidden = shown ? hidden.filter(item => item !== key) : [...hidden, key]; persist(); }"
+        @reorder="(key: string, dir: number) => { columnOrder = moveKey(columnOrder.length ? columnOrder : [...dataColumnKeys], key, dir); persist(); }"
+      />
+      <NButton v-if="canDelete" :disabled="!checked.length" type="error" ghost @click="batchDelete">{{ $t('page.mes.query.batchDelete') }}</NButton>
       <NButton v-if="canAdd" type="primary" @click="openCreate">{{ $t('common.add') }}</NButton>
     </NSpace>
+    <NSpace v-show="!collapsed" class="mb-12px" wrap>
+      <NInput v-model:value="keyword" :placeholder="$t('page.mes.wip.orderNo')" clearable class="w-180px" @keyup.enter="search" />
+      <NInput v-model:value="productCode" :placeholder="$t('page.mes.wip.product')" clearable class="w-160px" @keyup.enter="search" />
+      <NSelect
+        v-model:value="statuses"
+        multiple
+        clearable
+        class="w-220px"
+        :placeholder="$t('page.mes.wip.status')"
+        :options="['created', 'released', 'in_progress', 'completed', 'closed'].map(value => ({ label: statusLabel(value), value }))"
+      />
+      <NDatePicker v-model:value="dueRange" type="daterange" clearable />
+      <NSelect v-model:value="sort" class="w-150px" :options="[{ label: 'ID ↓', value: '-id' }, { label: 'ID ↑', value: 'id' }, { label: 'No ↑', value: 'order_no' }, { label: 'Due ↑', value: 'due_date' }]" />
+      <NButton type="primary" @click="search">{{ $t('common.search') }}</NButton>
+      <NButton @click="reset">{{ $t('common.reset') }}</NButton>
+    </NSpace>
     <NDataTable
+      v-model:checked-row-keys="checked"
       remote
+      :row-key="(row: WorkOrderRow) => row.id"
       :loading="loading"
       :columns="columns"
       :data="rows"

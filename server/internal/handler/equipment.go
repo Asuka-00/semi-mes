@@ -85,8 +85,14 @@ type pmCompleteBody struct {
 type pmListBody struct {
 	Page        int    `json:"page"`
 	Limit       int    `json:"limit"`
+	Sort        string `json:"sort"`
 	Status      string `json:"status"`
 	EquipmentID uint64 `json:"equipmentID"`
+	Columns     []struct {
+		Name  string `json:"name"`
+		Exp   string `json:"exp"`
+		Value any    `json:"value"`
+	} `json:"columns"`
 }
 
 func CreateEquipment(c *gin.Context) {
@@ -207,12 +213,26 @@ func SavePmPlan(c *gin.Context) {
 }
 
 func ListPmPlans(c *gin.Context) {
-	rows, err := dao.ListPmPlans(database.GetDB())
+	rows, _, err := dao.ListPmPlans(database.GetDB(), 0, 500, nil)
 	if err != nil {
 		writeWipErr(c, err)
 		return
 	}
 	response.Success(c, gin.H{"plans": rows})
+}
+
+func ListPmPlanPage(c *gin.Context) {
+	body := wipListBody{}
+	if c.Request.ContentLength > 0 {
+		_ = c.ShouldBindJSON(&body)
+	}
+	page, limit, _, cols := body.query()
+	rows, total, err := dao.ListPmPlans(database.GetDB(), page, limit, cols)
+	if err != nil {
+		writeWipErr(c, err)
+		return
+	}
+	response.Success(c, gin.H{"plans": rows, "total": total})
 }
 
 func DeletePmPlan(c *gin.Context) {
@@ -233,7 +253,35 @@ func ListPmTasks(c *gin.Context) {
 	if c.Request.ContentLength > 0 {
 		_ = c.ShouldBindJSON(&body)
 	}
-	rows, total, err := dao.ListPmTasks(database.GetDB(), body.Page, body.Limit, body.Status, body.EquipmentID)
+	cols := make([]dao.Column, 0, len(body.Columns)+2)
+	hasStatus := false
+	hasEqp := false
+	for _, col := range body.Columns {
+		if col.Name == "status" {
+			hasStatus = true
+		}
+		if col.Name == "equipment_id" {
+			hasEqp = true
+		}
+		cols = append(cols, dao.Column{Name: col.Name, Exp: col.Exp, Value: stringify(col.Value)})
+	}
+	if body.Status != "" && !hasStatus {
+		cols = append(cols, dao.Column{Name: "status", Exp: "=", Value: body.Status})
+	}
+	if body.EquipmentID > 0 && !hasEqp {
+		cols = append(cols, dao.Column{Name: "equipment_id", Exp: "=", Value: strconv.FormatUint(body.EquipmentID, 10)})
+	}
+	page, limit := body.Page, body.Limit
+	if page < 0 {
+		page = 0
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 2000 {
+		limit = 2000
+	}
+	rows, total, err := dao.ListPmTasks(database.GetDB(), page, limit, cols)
 	if err != nil {
 		writeWipErr(c, err)
 		return

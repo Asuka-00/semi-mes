@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-dev-frame/sponge/pkg/gin/response"
@@ -70,8 +71,11 @@ func (b workOrderBody) input() dao.WorkOrderInput {
 
 func (b wipListBody) query() (int, int, string, []dao.Column) {
 	limit := b.Limit
-	if limit <= 0 || limit > 200 {
+	if limit <= 0 {
 		limit = 10
+	}
+	if limit > 2000 {
+		limit = 2000
 	}
 	page := b.Page
 	if page < 0 {
@@ -90,6 +94,14 @@ func stringify(v any) string {
 		return n
 	case float64:
 		return strconv.FormatInt(int64(n), 10)
+	case []any:
+		parts := make([]string, 0, len(n))
+		for _, item := range n {
+			if text := stringify(item); text != "" {
+				parts = append(parts, text)
+			}
+		}
+		return strings.Join(parts, ",")
 	default:
 		return ""
 	}

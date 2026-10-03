@@ -99,12 +99,27 @@ func planInput(body planBody) dao.PlanInput {
 
 // ListInspectPlans returns measurement plans.
 func ListInspectPlans(c *gin.Context) {
-	rows, err := dao.ListInspectPlans(database.GetDB())
+	rows, _, err := dao.ListInspectPlans(database.GetDB(), 0, 500, nil)
 	if err != nil {
 		writeWipErr(c, err)
 		return
 	}
 	response.Success(c, gin.H{"plans": rows})
+}
+
+// ListInspectPlanPage returns a filtered page of measurement plans.
+func ListInspectPlanPage(c *gin.Context) {
+	body := wipListBody{}
+	if c.Request.ContentLength > 0 {
+		_ = c.ShouldBindJSON(&body)
+	}
+	page, limit, _, cols := body.query()
+	rows, total, err := dao.ListInspectPlans(database.GetDB(), page, limit, cols)
+	if err != nil {
+		writeWipErr(c, err)
+		return
+	}
+	response.Success(c, gin.H{"plans": rows, "total": total})
 }
 
 // SaveInspectPlan creates or replaces a plan.
@@ -155,12 +170,27 @@ func RecordMeasurement(c *gin.Context) {
 
 // ListDefectCodes returns the defect master.
 func ListDefectCodes(c *gin.Context) {
-	rows, err := dao.ListDefectCodes(database.GetDB())
+	rows, _, err := dao.ListDefectCodes(database.GetDB(), 0, 500, nil)
 	if err != nil {
 		writeWipErr(c, err)
 		return
 	}
 	response.Success(c, gin.H{"codes": rows})
+}
+
+// ListDefectCodePage returns a filtered page of defect codes.
+func ListDefectCodePage(c *gin.Context) {
+	body := wipListBody{}
+	if c.Request.ContentLength > 0 {
+		_ = c.ShouldBindJSON(&body)
+	}
+	page, limit, _, cols := body.query()
+	rows, total, err := dao.ListDefectCodes(database.GetDB(), page, limit, cols)
+	if err != nil {
+		writeWipErr(c, err)
+		return
+	}
+	response.Success(c, gin.H{"codes": rows, "total": total})
 }
 
 // SaveDefectCode creates or updates a defect code.
@@ -184,12 +214,27 @@ func SaveDefectCode(c *gin.Context) {
 // ListDefects returns recent defect records.
 func ListDefects(c *gin.Context) {
 	lotID, _ := strconv.ParseUint(c.Query("lotId"), 10, 64)
-	rows, err := dao.ListDefects(database.GetDB(), lotID)
+	rows, _, err := dao.ListDefects(database.GetDB(), lotID, 0, 100, nil)
 	if err != nil {
 		writeWipErr(c, err)
 		return
 	}
 	response.Success(c, gin.H{"defects": rows})
+}
+
+// ListDefectPage returns a filtered page of defect records.
+func ListDefectPage(c *gin.Context) {
+	body := wipListBody{}
+	if c.Request.ContentLength > 0 {
+		_ = c.ShouldBindJSON(&body)
+	}
+	page, limit, _, cols := body.query()
+	rows, total, err := dao.ListDefects(database.GetDB(), 0, page, limit, cols)
+	if err != nil {
+		writeWipErr(c, err)
+		return
+	}
+	response.Success(c, gin.H{"defects": rows, "total": total})
 }
 
 // RecordDefect stores a defect and applies the disposition.

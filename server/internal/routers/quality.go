@@ -10,6 +10,7 @@ func init() {
 	apiV1RouterFns = append(apiV1RouterFns, func(group *gin.RouterGroup) {
 		plans := group.Group("/qcInspectPlan")
 		plans.GET("", handler.ListInspectPlans)
+		plans.POST("/list", handler.ListInspectPlanPage)
 		plans.POST("", handler.SaveInspectPlan)
 		plans.PUT("/:id", handler.SaveInspectPlan)
 		plans.DELETE("/:id", handler.DeleteInspectPlan)
@@ -19,11 +20,13 @@ func init() {
 
 		codes := group.Group("/qcDefectCode")
 		codes.GET("", handler.ListDefectCodes)
+		codes.POST("/list", handler.ListDefectCodePage)
 		codes.POST("", handler.SaveDefectCode)
 		codes.PUT("/:id", handler.SaveDefectCode)
 
 		defects := group.Group("/qcDefect")
 		defects.GET("", handler.ListDefects)
+		defects.POST("/list", handler.ListDefectPage)
 		defects.GET("/pareto", handler.DefectPareto)
 		defects.POST("", handler.RecordDefect)
 

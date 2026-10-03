@@ -43,7 +43,8 @@ export interface ChartView {
   events: Array<Record<string, any>>;
 }
 
-export function fetchPlans() {
+export function fetchPlans(body?: Record<string, unknown>) {
+  if (body) return request<{ plans: InspectPlan[]; total: number }>({ url: '/qcInspectPlan/list', method: 'post', data: body });
   return request<{ plans: InspectPlan[] }>({ url: '/qcInspectPlan' });
 }
 
@@ -59,7 +60,8 @@ export function recordMeasurement(data: Record<string, unknown>) {
   return request<{ result: string }>({ url: '/qcMeasurement', method: 'post', data });
 }
 
-export function fetchDefectCodes() {
+export function fetchDefectCodes(body?: Record<string, unknown>) {
+  if (body) return request<{ codes: Array<Record<string, any>>; total: number }>({ url: '/qcDefectCode/list', method: 'post', data: body });
   return request<{ codes: Array<Record<string, any>> }>({ url: '/qcDefectCode' });
 }
 
@@ -67,7 +69,8 @@ export function saveDefectCode(data: Record<string, unknown>, id?: number) {
   return request({ url: id ? `/qcDefectCode/${id}` : '/qcDefectCode', method: id ? 'put' : 'post', data });
 }
 
-export function fetchDefects(lotId?: number) {
+export function fetchDefects(lotId?: number, body?: Record<string, unknown>) {
+  if (body) return request<{ defects: Array<Record<string, any>>; total: number }>({ url: '/qcDefect/list', method: 'post', data: body });
   return request<{ defects: Array<Record<string, any>> }>({
     url: '/qcDefect',
     params: lotId ? { lotId } : undefined

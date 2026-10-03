@@ -426,7 +426,12 @@ func PassNode(db *gorm.DB, in PassInput) (*model.WipLot, routegraph.Result, erro
 }
 
 // ListMoves returns a page of move history.
-func ListMoves(db *gorm.DB, page, limit int, columns []Column) ([]MoveView, int64, error) {
+func ListMoves(db *gorm.DB, page, limit int, sort string, columns []Column) ([]MoveView, int64, error) {
+	allow := map[string]string{
+		"lot_no": "l.lot_no", "state": "m.state", "node_key": "m.node_key", "equipment_code": "e.equipment_code",
+		"equipment_id": "m.equipment_id", "product_code": "p.product_code",
+		"track_out_at": "m.track_out_at", "created_at": "m.created_at", "id": "m.id",
+	}
 	q := db.Table("wip_move m").
 		Select("m.*, l.lot_no, e.equipment_code, e.equipment_name, u.username AS operator_name, n.name AS node_name, p.product_code").
 		Joins("JOIN wip_lot l ON l.id = m.lot_id").
@@ -434,15 +439,13 @@ func ListMoves(db *gorm.DB, page, limit int, columns []Column) ([]MoveView, int6
 		Joins("LEFT JOIN sys_user u ON u.id = m.operator_id").
 		Joins("LEFT JOIN base_route_node n ON n.version_id = l.route_version_id AND n.node_key = m.node_key AND n.deleted_at IS NULL").
 		Joins("LEFT JOIN base_product p ON p.id = l.product_id")
-	q = applyColumns(q, columns, map[string]string{
-		"lot_no": "l.lot_no", "state": "m.state", "node_key": "m.node_key", "equipment_code": "e.equipment_code",
-	})
+	q = applyColumns(q, columns, allow)
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 	var rows []MoveView
-	err := q.Order("m.id DESC").Offset(page * limit).Limit(limit).Scan(&rows).Error
+	err := q.Order(orderClause(sort, allow, "m.id DESC")).Offset(page * limit).Limit(limit).Scan(&rows).Error
 	return rows, total, err
 }
 

@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, h, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import type { DataTableColumns, FormInst, FormRules } from 'naive-ui';
+import type { DataTableColumns, DataTableRowKey, FormInst, FormRules } from 'naive-ui';
 import { NButton, NPopconfirm, NTag } from 'naive-ui';
+import ColumnPicker from '@/components/mes/column-picker.vue';
 import { useAuth } from '@/hooks/business/auth';
+import { downloadCsv, keepColumn, loadPagePref, moveKey, orderedKeys, rangeColumns, savePagePref } from '@/hooks/business/list-kit';
 import { $t } from '@/locales';
 import { changeEquipmentState, fetchEquipmentDetail, fetchEquipmentPage, removeEquipment, saveEquipment } from '@/service/api/equipment';
 import type { EquipmentRow } from '@/service/api/equipment';
-import { mesList } from '@/service/api/mes';
+import { mesBatch, mesList } from '@/service/api/mes';
 
 const router = useRouter();
 const { hasAuth } = useAuth();
@@ -19,7 +21,17 @@ const rows = ref<EquipmentRow[]>([]);
 const total = ref(0);
 const page = ref(1);
 const keyword = ref('');
-const status = ref<string | null>(null);
+const name = ref('');
+const group = ref('');
+const status = ref<string[]>([]);
+const createdRange = ref<[number, number] | null>(null);
+const sort = ref('equipment_code');
+const collapsed = ref(false);
+const hidden = ref<string[]>([]);
+const columnOrder = ref<string[]>([]);
+const prefsReady = ref(false);
+const checked = ref<DataTableRowKey[]>([]);
+const dataColumnKeys = ['equipmentCode', 'equipmentName', 'equipmentGroup', 'equipmentType', 'modelName', 'manufacturer', 'location', 'capacity', 'status'];
 const loading = ref(false);
 const modal = ref(false);
 const stateOpen = ref(false);
@@ -81,12 +93,30 @@ const rules = computed<FormRules>(() => ({
   equipmentName: { required: true, message: $t('form.required'), trigger: 'blur' }
 }));
 
-async function load() {
-  loading.value = true;
+function filters() {
   const columns = [];
   if (keyword.value) columns.push({ name: 'equipment_code', exp: 'like', value: keyword.value });
-  if (status.value) columns.push({ name: 'status', exp: '=', value: status.value });
-  const { data, error } = await fetchEquipmentPage({ page: page.value - 1, limit: 10, columns });
+  if (name.value) columns.push({ name: 'equipment_name', exp: 'like', value: name.value });
+  if (group.value) columns.push({ name: 'equipment_group', exp: 'like', value: group.value });
+  if (status.value.length) columns.push({ name: 'status', exp: 'in', value: status.value.join(',') });
+  return [...columns, ...rangeColumns('created_at', createdRange.value)];
+}
+
+async function persist() {
+  if (!prefsReady.value) return;
+  await savePagePref('eqpEquipment', {
+    search: { keyword: keyword.value, name: name.value, group: group.value, status: status.value },
+    hidden: hidden.value,
+    order: columnOrder.value,
+    collapsed: collapsed.value,
+    sort: sort.value,
+    createdRange: createdRange.value
+  });
+}
+
+async function load() {
+  loading.value = true;
+  const { data, error } = await fetchEquipmentPage({ page: page.value - 1, limit: 10, sort: sort.value, columns: filters() });
   loading.value = false;
   if (error || !data) return;
   rows.value = data.eqpEquipments || [];
@@ -159,7 +189,10 @@ async function submitState() {
   load();
 }
 
-const columns = computed<DataTableColumns<EquipmentRow>>(() => [
+const columns = computed<DataTableColumns<EquipmentRow>>(() => {
+  const visible = new Set(orderedKeys(dataColumnKeys, columnOrder.value).filter(key => !hidden.value.includes(key)));
+  const all: DataTableColumns<EquipmentRow> = [
+  { type: 'selection' },
   { title: $t('page.mes.eqp.code'), key: 'equipmentCode', minWidth: 120 },
   { title: $t('page.mes.eqp.name'), key: 'equipmentName', minWidth: 160 },
   { title: $t('page.mes.eqp.group'), key: 'equipmentGroup', width: 100 },
@@ -215,20 +248,85 @@ const columns = computed<DataTableColumns<EquipmentRow>>(() => [
           : null
       ])
   }
-]);
+  ];
+  return all.filter(column => keepColumn(column, visible));
+});
 
-onMounted(load);
+async function exportRows() {
+  const { data, error } = await fetchEquipmentPage({ page: 0, limit: 2000, sort: sort.value, columns: filters() });
+  if (error || !data?.eqpEquipments?.length) {
+    window.$message?.warning($t('page.mes.query.exportEmpty'));
+    return;
+  }
+  downloadCsv(
+    'equipment',
+    ['code', 'name', 'group', 'status'],
+    data.eqpEquipments.map(row => [row.equipmentCode, row.equipmentName, row.equipmentGroup, row.status])
+  );
+}
+
+async function batchDelete() {
+  const ids = checked.value.map(item => Number(item));
+  const { data, error } = await mesBatch({ resource: 'eqpEquipment', action: 'delete', ids });
+  if (error || !data) return;
+  checked.value = [];
+  window.$message?.success($t('page.mes.query.partial', { ok: data.ok?.length || 0, failed: data.failed?.length || 0 }));
+  load();
+}
+
+function reset() {
+  keyword.value = '';
+  name.value = '';
+  group.value = '';
+  status.value = [];
+  createdRange.value = null;
+  sort.value = 'equipment_code';
+  page.value = 1;
+  persist();
+  load();
+}
+
+onMounted(async () => {
+  const pref = await loadPagePref('eqpEquipment');
+  keyword.value = String(pref.search?.keyword || '');
+  name.value = String(pref.search?.name || '');
+  group.value = String(pref.search?.group || '');
+  status.value = Array.isArray(pref.search?.status) ? (pref.search.status as string[]) : [];
+  hidden.value = pref.hidden || [];
+  columnOrder.value = pref.order || [...dataColumnKeys];
+  collapsed.value = Boolean(pref.collapsed);
+  sort.value = pref.sort || 'equipment_code';
+  createdRange.value = pref.createdRange || null;
+  prefsReady.value = true;
+  load();
+});
 </script>
 
 <template>
   <NCard :bordered="false" class="card-wrapper" :title="$t('route.equipment_list')">
-    <NSpace class="mb-12px">
-      <NInput v-model:value="keyword" :placeholder="$t('page.mes.eqp.code')" class="w-180px" clearable @keyup.enter="page = 1; load()" />
-      <NSelect v-model:value="status" :options="stateOptions" clearable class="w-180px" :placeholder="$t('page.mes.eqp.state')" />
-      <NButton @click="page = 1; load()">{{ $t('common.search') }}</NButton>
+    <NSpace class="mb-12px" wrap>
+      <NButton @click="collapsed = !collapsed; persist()">{{ collapsed ? $t('page.mes.query.expand') : $t('page.mes.query.collapse') }}</NButton>
+      <NButton @click="exportRows">{{ $t('page.mes.query.export') }}</NButton>
+      <ColumnPicker
+        :items="orderedKeys(dataColumnKeys, columnOrder).map(key => ({ key, label: key }))"
+        :hidden="hidden"
+        @toggle="(key: string, shown: boolean) => { hidden = shown ? hidden.filter(item => item !== key) : [...hidden, key]; persist(); }"
+        @reorder="(key: string, dir: number) => { columnOrder = moveKey(columnOrder.length ? columnOrder : [...dataColumnKeys], key, dir); persist(); }"
+      />
+      <NButton v-if="canDelete" :disabled="!checked.length" type="error" ghost @click="batchDelete">{{ $t('page.mes.query.batchDelete') }}</NButton>
       <NButton v-if="canAdd" type="primary" @click="openCreate">{{ $t('common.add') }}</NButton>
     </NSpace>
-    <NDataTable remote :loading="loading" :columns="columns" :data="rows" :scroll-x="1400" :pagination="{ page, pageSize: 10, itemCount: total, onUpdatePage: (next: number) => { page = next; load(); } }" />
+    <NSpace v-show="!collapsed" class="mb-12px" wrap>
+      <NInput v-model:value="keyword" :placeholder="$t('page.mes.eqp.code')" class="w-160px" clearable @keyup.enter="page = 1; persist(); load()" />
+      <NInput v-model:value="name" :placeholder="$t('page.mes.eqp.name')" class="w-160px" clearable @keyup.enter="page = 1; persist(); load()" />
+      <NInput v-model:value="group" :placeholder="$t('page.mes.eqp.group')" class="w-140px" clearable @keyup.enter="page = 1; persist(); load()" />
+      <NSelect v-model:value="status" :options="stateOptions" multiple clearable class="w-220px" :placeholder="$t('page.mes.eqp.state')" />
+      <NDatePicker v-model:value="createdRange" type="daterange" clearable />
+      <NSelect v-model:value="sort" class="w-160px" :options="[{ label: 'Code ↑', value: 'equipment_code' }, { label: 'Code ↓', value: '-equipment_code' }, { label: 'Name ↑', value: 'equipment_name' }]" />
+      <NButton type="primary" @click="page = 1; persist(); load()">{{ $t('common.search') }}</NButton>
+      <NButton @click="reset">{{ $t('common.reset') }}</NButton>
+    </NSpace>
+    <NDataTable v-model:checked-row-keys="checked" remote :row-key="(row: EquipmentRow) => row.id" :loading="loading" :columns="columns" :data="rows" :scroll-x="1400" :pagination="{ page, pageSize: 10, itemCount: total, onUpdatePage: (next: number) => { page = next; load(); } }" />
     <NModal v-model:show="modal" preset="card" :title="editingId ? $t('common.edit') : $t('common.add')" class="w-640px">
       <NForm ref="formRef" :model="form" :rules="rules" label-placement="left" label-width="100">
         <NFormItem :label="$t('page.mes.eqp.code')" path="equipmentCode"><NInput v-model:value="form.equipmentCode" /></NFormItem>

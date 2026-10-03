@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, h, onMounted, reactive, ref, watch } from 'vue';
 import type { VNode } from 'vue';
-import type { DataTableColumns, FormInst, FormRules, SelectOption, TreeOption } from 'naive-ui';
+import type { DataTableColumns, DataTableRowKey, FormInst, FormRules, SelectOption, TreeOption } from 'naive-ui';
 import { NButton, NPopconfirm, NSpace } from 'naive-ui';
+import ColumnPicker from '@/components/mes/column-picker.vue';
 import { useAuth } from '@/hooks/business/auth';
+import { downloadCsv, loadPagePref, moveKey, orderedKeys, rangeColumns, savePagePref, snake } from '@/hooks/business/list-kit';
 import { $t } from '@/locales';
 import {
+  mesBatch,
   mesCreate,
   mesDelete,
   mesGetRoleMenus,
@@ -15,6 +18,7 @@ import {
   mesSetUserRoles,
   mesUpdate
 } from '@/service/api/mes';
+import type { MesColumn } from '@/service/api/mes';
 import type { MesChildren, MesField, MesOption } from './types';
 
 defineOptions({ name: 'MesCrudPage' });
@@ -37,7 +41,15 @@ const page = ref(1);
 const pageSize = ref(10);
 const searchModel = reactive<Record<string, any>>({});
 const relationOptions = reactive<Record<string, MesOption[]>>({});
+const relationLoading = reactive<Record<string, boolean>>({});
 const selectedId = ref<number | null>(null);
+const collapsed = ref(false);
+const checked = ref<DataTableRowKey[]>([]);
+const hidden = ref<string[]>([]);
+const columnOrder = ref<string[]>([]);
+const createdRange = ref<[number, number] | null>(null);
+const sort = ref('-id');
+const prefsReady = ref(false);
 
 const modalVisible = ref(false);
 const editingId = ref<number | null>(null);
@@ -99,15 +111,51 @@ function displayValue(field: MesField, row: Record<string, any>) {
   return value ?? '';
 }
 
+const mainFieldKeys = computed(() =>
+  props.fields.filter(field => field.table !== false && field.type !== 'password' && field.type !== 'textarea').map(field => field.key)
+);
+
+const orderedMainFields = computed(() => {
+  const byKey = new Map(props.fields.map(field => [field.key, field]));
+  return orderedKeys(mainFieldKeys.value, columnOrder.value)
+    .filter(key => !hidden.value.includes(key))
+    .map(key => byKey.get(key))
+    .filter((field): field is MesField => Boolean(field));
+});
+
+const columnItems = computed(() => {
+  const byKey = new Map(props.fields.map(field => [field.key, field]));
+  return orderedKeys(mainFieldKeys.value, columnOrder.value).map(key => ({
+    key,
+    label: $t(byKey.get(key)?.label || 'page.mes.field.status')
+  }));
+});
+
+const sortOptions = computed(() => {
+  const options = [
+    { label: `${$t('page.mes.query.sort')} ID ↓`, value: '-id' },
+    { label: `${$t('page.mes.query.sort')} ID ↑`, value: 'id' }
+  ];
+  props.fields
+    .filter(field => field.search && field.searchColumn && field.type !== 'status' && field.type !== 'yesno' && field.type !== 'select' && !field.relation)
+    .forEach(field => {
+      options.push({ label: `${$t(field.label)} ↑`, value: field.searchColumn as string });
+      options.push({ label: `${$t(field.label)} ↓`, value: `-${field.searchColumn}` });
+    });
+  return options;
+});
+
 function buildColumns(fields: MesField[], actions: 'main' | 'child'): DataTableColumns<Record<string, any>> {
-  const columns: DataTableColumns<Record<string, any>> = fields
-    .filter(field => field.table !== false && field.type !== 'password' && field.type !== 'textarea')
-    .map(field => ({
-      title: $t(field.label),
-      key: field.key,
-      minWidth: 120,
-      render: row => displayValue(field, row)
-    }));
+  const source = actions === 'main' ? orderedMainFields.value : fields.filter(field => field.table !== false && field.type !== 'password' && field.type !== 'textarea');
+  const columns: DataTableColumns<Record<string, any>> = source.map(field => ({
+    title: $t(field.label),
+    key: field.key,
+    minWidth: 120,
+    render: row => displayValue(field, row)
+  }));
+  if (actions === 'main' && (canDelete.value || canEdit.value)) {
+    columns.unshift({ type: 'selection' });
+  }
 
   columns.push({
     title: $t('common.action'),
@@ -243,38 +291,76 @@ function payloadFrom(fields: MesField[], model: Record<string, any>, editing: bo
   return data;
 }
 
-function searchColumns() {
+function searchColumns(): MesColumn[] {
   const filters = props.fields
     .filter(field => field.search && field.searchColumn)
     .flatMap(field => {
       const value = searchModel[field.key];
-      if (value === null || value === undefined || value === '') return [];
-      const numeric = field.type === 'status' || field.type === 'yesno' || field.type === 'select' || field.relation;
+      if (value === null || value === undefined || value === '' || (Array.isArray(value) && value.length === 0)) return [];
+      const exact = field.type === 'status' || field.type === 'yesno' || field.type === 'select' || Boolean(field.relation);
+      if (Array.isArray(value)) {
+        return [{ name: field.searchColumn as string, exp: 'in', value: value.join(','), logic: 'and' }];
+      }
       return [
         {
           name: field.searchColumn as string,
-          exp: numeric ? '=' : 'like',
-          value: numeric ? Number(value) : `%${value}%`,
+          exp: exact ? '=' : 'like',
+          value: exact ? Number(value) : `%${value}%`,
           logic: 'and'
         }
       ];
     });
-  return filters;
+  return [...filters, ...rangeColumns('created_at', createdRange.value)];
+}
+
+function currentPref() {
+  return {
+    search: { ...searchModel },
+    hidden: hidden.value,
+    order: columnOrder.value.length ? columnOrder.value : mainFieldKeys.value,
+    collapsed: collapsed.value,
+    sort: sort.value,
+    createdRange: createdRange.value
+  };
+}
+
+async function persist() {
+  if (!prefsReady.value) return;
+  await savePagePref(props.resource, currentPref());
+}
+
+function relationLabel(field: MesField, item: Record<string, any>) {
+  const relation = field.relation!;
+  return relation.extraLabelKey ? `${item[relation.labelKey]} ${item[relation.extraLabelKey] || ''}`.trim() : String(item[relation.labelKey] ?? item.id);
+}
+
+async function searchRelation(field: MesField, keyword = '') {
+  if (!field.relation) return;
+  relationLoading[field.key] = true;
+  const relation = field.relation;
+  const column = snake(relation.labelKey);
+  const { data, error } = await mesList(relation.resource, {
+    page: 0,
+    limit: 50,
+    sort: '-id',
+    columns: keyword ? [{ name: column, exp: 'like', value: `%${keyword}%`, logic: 'and' }] : undefined
+  });
+  relationLoading[field.key] = false;
+  if (error || !data) return;
+  const list = Array.isArray(data[relation.listKey]) ? data[relation.listKey] : [];
+  const next: MesOption[] = list.map((item: Record<string, any>) => ({ value: Number(item.id), label: relationLabel(field, item) }));
+  const selectedValues = Array.isArray(searchModel[field.key]) ? (searchModel[field.key] as Array<string | number>) : [];
+  const selected = new Set(selectedValues.map(item => Number(item)));
+  const kept = (relationOptions[field.key] || []).filter(item => selected.has(Number(item.value)));
+  const merged = [...kept];
+  next.forEach(item => {
+    if (!merged.some(old => old.value === item.value)) merged.push(item);
+  });
+  relationOptions[field.key] = merged;
 }
 
 async function loadOptions() {
-  const tasks = props.fields
-    .filter(field => field.relation)
-    .map(async field => {
-      const relation = field.relation!;
-      const { data, error } = await mesList(relation.resource, { page: 0, limit: 200, sort: '-id' });
-      if (error || !data) return;
-      const list = Array.isArray(data[relation.listKey]) ? data[relation.listKey] : [];
-      relationOptions[field.key] = list.map((item: Record<string, any>) => ({
-        value: Number(item.id),
-        label: relation.extraLabelKey ? `${item[relation.labelKey]} ${item[relation.extraLabelKey] || ''}`.trim() : String(item[relation.labelKey] ?? item.id)
-      }));
-    });
+  const tasks = props.fields.filter(field => field.relation).map(field => searchRelation(field, ''));
   await Promise.all(tasks);
   if (props.assignment === 'user-roles' || props.assignment === 'role-menus') {
     const { data } = await mesList('sysRole', { page: 0, limit: 200, sort: '-id' });
@@ -296,7 +382,7 @@ async function loadList() {
   const { data, error } = await mesList(props.resource, {
     page: page.value - 1,
     limit: pageSize.value,
-    sort: '-id',
+    sort: sort.value || '-id',
     columns: filters.length ? filters : undefined
   });
   loading.value = false;
@@ -325,14 +411,61 @@ async function loadChildren() {
 
 function handleSearch() {
   page.value = 1;
+  persist();
   loadList();
 }
 
 function handleReset() {
   props.fields.forEach(field => {
-    if (field.search) searchModel[field.key] = null;
+    if (field.search) searchModel[field.key] = field.type === 'status' || field.type === 'yesno' || field.type === 'select' || field.relation ? [] : null;
   });
+  createdRange.value = null;
+  sort.value = '-id';
   handleSearch();
+}
+
+async function exportRows() {
+  const filters = searchColumns();
+  const { data, error } = await mesList(props.resource, {
+    page: 0,
+    limit: 2000,
+    sort: sort.value || '-id',
+    columns: filters.length ? filters : undefined
+  });
+  if (error || !data) return;
+  const list = Array.isArray(data[props.listKey]) ? data[props.listKey] : [];
+  if (!list.length) {
+    window.$message?.warning($t('page.mes.query.exportEmpty'));
+    return;
+  }
+  const fields = orderedMainFields.value;
+  downloadCsv(
+    props.resource,
+    fields.map(field => $t(field.label)),
+    list.map((row: Record<string, any>) => fields.map(field => displayValue(field, row)))
+  );
+  window.$message?.success($t('page.mes.query.exported', { count: list.length }));
+}
+
+async function runBatch(action: 'delete' | 'enable' | 'disable') {
+  const ids = checked.value.map(item => Number(item)).filter(id => id > 0);
+  if (!ids.length) return;
+  const { data, error } = await mesBatch({ resource: props.resource, action, ids });
+  if (error || !data) return;
+  checked.value = [];
+  window.$message?.success($t('page.mes.query.partial', { ok: data.ok?.length || 0, failed: data.failed?.length || 0 }));
+  await loadList();
+}
+
+function toggleColumn(key: string, shown: boolean) {
+  hidden.value = shown ? hidden.value.filter(item => item !== key) : [...hidden.value, key];
+  persist();
+}
+
+function reorderColumn(key: string, direction: number) {
+  const base = columnOrder.value.length ? columnOrder.value : mainFieldKeys.value;
+  columnOrder.value = moveKey(base, key, direction);
+  persist();
 }
 
 function openCreate() {
@@ -480,8 +613,20 @@ watch(selectedId, loadChildren);
 
 onMounted(async () => {
   props.fields.forEach(field => {
-    if (field.search) searchModel[field.key] = null;
+    if (field.search) searchModel[field.key] = field.type === 'status' || field.type === 'yesno' || field.type === 'select' || field.relation ? [] : null;
   });
+  const pref = await loadPagePref(props.resource);
+  hidden.value = pref.hidden || [];
+  columnOrder.value = pref.order || [];
+  collapsed.value = Boolean(pref.collapsed);
+  sort.value = pref.sort || '-id';
+  createdRange.value = pref.createdRange || null;
+  if (pref.search) {
+    Object.entries(pref.search).forEach(([key, value]) => {
+      searchModel[key] = value;
+    });
+  }
+  prefsReady.value = true;
   await loadOptions();
   await loadList();
 });
@@ -490,12 +635,40 @@ onMounted(async () => {
 <template>
   <NSpace vertical :size="16">
     <NCard :bordered="false" class="card-wrapper">
-      <NSpace class="mb-16px" wrap>
+      <NSpace class="mb-12px" justify="space-between" wrap>
+        <NSpace>
+          <NButton @click="collapsed = !collapsed; persist()">
+            {{ collapsed ? $t('page.mes.query.expand') : $t('page.mes.query.collapse') }}
+          </NButton>
+          <NButton @click="exportRows">{{ $t('page.mes.query.export') }}</NButton>
+          <ColumnPicker :items="columnItems" :hidden="hidden" @toggle="toggleColumn" @reorder="reorderColumn" />
+          <NButton v-if="canEdit" :disabled="!checked.length" @click="runBatch('enable')">{{ $t('page.mes.query.batchEnable') }}</NButton>
+          <NButton v-if="canEdit" :disabled="!checked.length" @click="runBatch('disable')">{{ $t('page.mes.query.batchDisable') }}</NButton>
+          <NButton v-if="canDelete" :disabled="!checked.length" type="error" ghost @click="runBatch('delete')">{{ $t('page.mes.query.batchDelete') }}</NButton>
+          <NButton v-if="canAdd" type="primary" @click="openCreate">{{ $t('common.add') }}</NButton>
+        </NSpace>
+        <span v-if="checked.length">{{ $t('page.mes.query.selected', { count: checked.length }) }}</span>
+      </NSpace>
+      <NSpace v-show="!collapsed" class="mb-16px" wrap>
         <template v-for="field in fields" :key="field.key">
           <NSelect
-            v-if="field.search && (field.type === 'status' || field.type === 'yesno' || field.type === 'select' || field.relation)"
+            v-if="field.search && field.relation"
             v-model:value="searchModel[field.key]"
-            class="w-180px"
+            class="w-220px"
+            multiple
+            filterable
+            remote
+            clearable
+            :loading="relationLoading[field.key]"
+            :options="fieldOptions(field)"
+            :placeholder="$t(field.label)"
+            @search="(keyword: string) => searchRelation(field, keyword)"
+          />
+          <NSelect
+            v-else-if="field.search && (field.type === 'status' || field.type === 'yesno' || field.type === 'select')"
+            v-model:value="searchModel[field.key]"
+            class="w-200px"
+            multiple
             clearable
             :options="fieldOptions(field)"
             :placeholder="$t(field.label)"
@@ -509,11 +682,13 @@ onMounted(async () => {
             @keyup.enter="handleSearch"
           />
         </template>
+        <NDatePicker v-model:value="createdRange" type="daterange" clearable class="w-280px" :start-placeholder="$t('page.mes.query.createdRange')" />
+        <NSelect v-model:value="sort" class="w-180px" :options="sortOptions" />
         <NButton type="primary" @click="handleSearch">{{ $t('common.search') }}</NButton>
         <NButton @click="handleReset">{{ $t('common.reset') }}</NButton>
-        <NButton v-if="canAdd" type="primary" @click="openCreate">{{ $t('common.add') }}</NButton>
       </NSpace>
       <NDataTable
+        v-model:checked-row-keys="checked"
         remote
         :columns="columns"
         :data="rows"

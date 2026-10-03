@@ -239,6 +239,7 @@ func DeleteEquipment(db *gorm.DB, id uint64) error {
 func ListEquipmentPage(db *gorm.DB, page, limit int, sort string, columns []Column) ([]model.EqpEquipment, int64, error) {
 	allow := map[string]string{
 		"equipment_code": "equipment_code", "equipment_group": "equipment_group", "status": "status", "equipment_name": "equipment_name",
+		"id": "id", "created_at": "created_at",
 	}
 	q := applyColumns(db.Model(&model.EqpEquipment{}), columns, allow)
 	var total int64
@@ -268,7 +269,7 @@ func GetEquipmentDetail(db *gorm.DB, id uint64) (*EquipmentDetail, error) {
 	if err := db.Where("equipment_id = ?", id).Order("id desc").Limit(30).Find(&detail.StateLogs).Error; err != nil {
 		return nil, err
 	}
-	tasks, _, err := ListPmTasks(db, 0, 20, "", id)
+	tasks, _, err := ListPmTasks(db, 0, 20, []Column{{Name: "equipment_id", Exp: "=", Value: fmt.Sprintf("%d", id)}})
 	if err != nil {
 		return nil, err
 	}
@@ -434,14 +435,29 @@ func SavePmPlan(db *gorm.DB, id uint64, in PmPlanInput) (*model.EqpPmPlan, error
 	return &row, nil
 }
 
-// ListPmPlans returns enabled and disabled plans.
-func ListPmPlans(db *gorm.DB) ([]model.EqpPmPlan, error) {
+// ListPmPlans returns a filtered page of plans. limit <= 0 returns up to 500 rows.
+func ListPmPlans(db *gorm.DB, page, limit int, columns []Column) ([]model.EqpPmPlan, int64, error) {
+	rest, enabled, hasEnabled := pullColumn(columns, "enabled")
+	q := applyColumns(db.Model(&model.EqpPmPlan{}), rest, map[string]string{
+		"plan_name": "plan_name", "equipment_id": "equipment_id", "equipment_group": "equipment_group",
+		"trigger_type": "trigger_type", "created_at": "created_at",
+	})
+	if hasEnabled {
+		q = q.Where("enabled = ?", enabled == "1" || strings.EqualFold(enabled, "true"))
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if limit <= 0 || limit > 2000 {
+		limit = 500
+	}
 	var rows []model.EqpPmPlan
-	err := db.Order("id desc").Find(&rows).Error
+	err := q.Order("id desc").Offset(page * limit).Limit(limit).Find(&rows).Error
 	if rows == nil {
 		rows = []model.EqpPmPlan{}
 	}
-	return rows, err
+	return rows, total, err
 }
 
 // DeletePmPlan soft-deletes a plan that has no in-progress task.
@@ -456,8 +472,8 @@ func DeletePmPlan(db *gorm.DB, id uint64) error {
 	return db.Delete(&model.EqpPmPlan{}, id).Error
 }
 
-// ListPmTasks returns tasks, optionally for one equipment. It refreshes due tasks first.
-func ListPmTasks(db *gorm.DB, page, limit int, status string, equipmentID uint64) ([]PmTaskView, int64, error) {
+// ListPmTasks returns tasks. It refreshes due tasks first. Filters use the shared whitelist.
+func ListPmTasks(db *gorm.DB, page, limit int, columns []Column) ([]PmTaskView, int64, error) {
 	if err := EnsurePmTasks(db); err != nil {
 		return nil, 0, err
 	}
@@ -466,18 +482,19 @@ func ListPmTasks(db *gorm.DB, page, limit int, status string, equipmentID uint64
 		Joins("JOIN eqp_pm_plan p ON p.id = t.plan_id AND p.deleted_at IS NULL").
 		Joins("JOIN eqp_equipment e ON e.id = t.equipment_id AND e.deleted_at IS NULL").
 		Where("t.deleted_at IS NULL")
-	if status != "" {
-		q = q.Where("t.status = ?", status)
-	}
-	if equipmentID > 0 {
-		q = q.Where("t.equipment_id = ?", equipmentID)
-	}
+	q = applyColumns(q, columns, map[string]string{
+		"status": "t.status", "equipment_id": "t.equipment_id", "task_no": "t.task_no",
+		"equipment_code": "e.equipment_code", "plan_name": "p.plan_name", "due_at": "t.due_at", "created_at": "t.created_at",
+	})
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 	if limit <= 0 {
 		limit = 50
+	}
+	if limit > 2000 {
+		limit = 2000
 	}
 	var rows []PmTaskView
 	err := q.Order("t.id desc").Offset(page * limit).Limit(limit).Scan(&rows).Error

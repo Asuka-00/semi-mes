@@ -372,6 +372,23 @@ const local: App.I18n.Schema = {
       }
     },
     mes: {
+      query: {
+        collapse: '收起条件',
+        expand: '展开条件',
+        export: '导出当前结果',
+        columns: '列设置',
+        createdRange: '创建日期',
+        sort: '排序',
+        batchDelete: '批量删除',
+        batchEnable: '批量启用',
+        batchDisable: '批量停用',
+        batchHold: '批量 Hold',
+        batchRelease: '批量解除 Hold',
+        selected: '已选 {count}',
+        exported: '已导出 {count} 行（CSV，最多 2000）',
+        exportEmpty: '没有可导出的数据',
+        partial: '成功 {ok}，失败 {failed}'
+      },
       enabled: '启用',
       disabled: '停用',
       yes: '是',

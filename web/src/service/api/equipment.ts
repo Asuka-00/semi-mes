@@ -67,7 +67,8 @@ export function fetchEquipmentBoard() {
   }>({ url: '/eqpEquipment/board' });
 }
 
-export function fetchPmPlans() {
+export function fetchPmPlans(body?: Record<string, unknown>) {
+  if (body) return request<{ plans: Array<Record<string, any>>; total: number }>({ url: '/eqpPmPlan/list', method: 'post', data: body });
   return request<{ plans: Array<Record<string, any>> }>({ url: '/eqpPmPlan' });
 }
 
