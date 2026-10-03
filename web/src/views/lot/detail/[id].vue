@@ -5,10 +5,11 @@ import { MarkerType, VueFlow, useVueFlow } from '@vue-flow/core';
 import { Background } from '@vue-flow/background';
 import { Controls } from '@vue-flow/controls';
 import { MiniMap } from '@vue-flow/minimap';
-import type { DataTableColumns } from 'naive-ui';
+import type { DataTableColumns, DataTableRowKey } from 'naive-ui';
 import { useAuth } from '@/hooks/business/auth';
 import { useReasonOptions } from '@/hooks/business/dict';
 import { $t } from '@/locales';
+import { request } from '@/service/request';
 import { advanceLot, fetchLot, holdLot, releaseHold } from '@/service/api/wip';
 import '@vue-flow/core/dist/style.css';
 import '@vue-flow/core/dist/theme-default.css';
@@ -33,6 +34,10 @@ const defectCode = ref('');
 const resultText = ref('');
 const reasonCode = ref('HOLD');
 const reason = ref('');
+const wafers = ref<Array<Record<string, any>>>([]);
+const waferChecked = ref<DataTableRowKey[]>([]);
+const scrapCode = ref('BROKEN');
+const { options: scrapOptions } = useReasonOptions('scrap', () => [{ label: 'BROKEN', value: 'BROKEN' }]);
 const { options: holdReasons } = useReasonOptions('hold', () => [{ label: 'HOLD', value: 'HOLD' }]);
 const { options: releaseReasons } = useReasonOptions('release', () => [{ label: 'RELEASE', value: 'RELEASE' }]);
 const reasonOptions = computed(() => (lot.value?.status === 'hold' ? releaseReasons.value : holdReasons.value));
@@ -144,6 +149,8 @@ async function load() {
   links.value = data.links || [];
   nodes.value = data.nodes || [];
   edges.value = data.edges || [];
+  const waferRes = await request<{ wafers: Array<Record<string, any>> }>({ url: `/wipLot/${lotId.value}/wafers` });
+  wafers.value = waferRes.data?.wafers || [];
   await nextTick();
   await fitLot();
 }
@@ -159,6 +166,24 @@ async function advance() {
 async function hold() {
   const { error } = await holdLot(lotId.value, reasonCode.value || 'HOLD', reason.value);
   if (error) return;
+  load();
+}
+
+async function scrapWafers() {
+  const ids = waferChecked.value.map(item => Number(item));
+  if (!ids.length) return;
+  const { error } = await request({ url: `/wipLot/${lotId.value}/scrap`, method: 'post', data: { waferIds: ids, reasonCode: scrapCode.value } });
+  if (error) return;
+  waferChecked.value = [];
+  load();
+}
+
+async function splitWafers() {
+  const ids = waferChecked.value.map(item => Number(item));
+  if (!ids.length) return;
+  const { error } = await request({ url: `/wipLot/${lotId.value}/split`, method: 'post', data: { waferIds: [ids] } });
+  if (error) return;
+  waferChecked.value = [];
   load();
 }
 
@@ -240,6 +265,25 @@ watch(
     />
     <div class="mb-8px font-600">{{ $t('page.mes.wip.history') }}</div>
     <NDataTable :columns="historyColumns" :data="history" size="small" class="mb-16px" />
+    <div class="mb-8px font-600">{{ $t('page.mes.wafer.title') }}</div>
+    <NSpace v-if="canEdit" class="mb-8px" wrap>
+      <NSelect v-model:value="scrapCode" :options="scrapOptions" class="w-180px" />
+      <NButton :disabled="!waferChecked.length" @click="scrapWafers">{{ $t('page.mes.wafer.scrap') }}</NButton>
+      <NButton :disabled="!waferChecked.length || lot?.status !== 'waiting'" @click="splitWafers">{{ $t('page.mes.wafer.split') }}</NButton>
+    </NSpace>
+    <NDataTable
+      v-model:checked-row-keys="waferChecked"
+      :row-key="(row: Record<string, any>) => row.id"
+      :columns="[
+        { type: 'selection' },
+        { title: $t('page.mes.wafer.no'), key: 'waferNo' },
+        { title: $t('page.mes.wafer.slot'), key: 'slot', width: 80 },
+        { title: $t('page.mes.wafer.status'), key: 'status', width: 120 }
+      ]"
+      :data="wafers"
+      size="small"
+      class="mb-16px"
+    />
     <div class="mb-8px font-600">{{ $t('page.mes.wip.genealogy') }}</div>
     <NSpace vertical>
       <div v-for="link in links" :key="link.id">

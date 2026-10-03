@@ -37,14 +37,15 @@ export interface StationView {
   latestResult?: string;
   openMove: Record<string, any> | null;
   equipment: EquipmentRow[];
+  carrierNo?: string;
 }
 
 export function fetchStation(lotNo: string) {
   return request<StationView>({ url: '/wipMove/station', params: { lotNo } });
 }
 
-export function trackIn(lotId: number, equipmentId: number) {
-  return request({ url: '/wipMove/trackIn', method: 'post', data: { lotId, equipmentId } });
+export function trackIn(lotId: number, equipmentId: number, carrierNo = '') {
+  return request({ url: '/wipMove/trackIn', method: 'post', data: { lotId, equipmentId, carrierNo } });
 }
 
 export function trackOut(data: Record<string, unknown>) {

@@ -202,6 +202,7 @@ const routeMap: RouteMap = {
   "system_role": "/system/role",
   "system_user": "/system/user",
   "wip": "/wip",
+  "wip_carrier": "/wip/carrier",
   "wip_move": "/wip/move",
   "wip_overview": "/wip/overview",
   "wip_station": "/wip/station",

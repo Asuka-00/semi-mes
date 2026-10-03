@@ -48,7 +48,8 @@ type holdBody struct {
 }
 
 type splitBody struct {
-	Quantities []int `json:"quantities"`
+	Quantities []int      `json:"quantities"`
+	WaferIDs   [][]uint64 `json:"waferIds"`
 }
 
 type mergeBody struct {
@@ -356,7 +357,14 @@ func SplitLot(c *gin.Context) {
 		response.Error(c, ecode.InvalidParams)
 		return
 	}
-	parent, children, err := dao.SplitLot(database.GetDB(), id, body.Quantities)
+	var parent *model.WipLot
+	var children []model.WipLot
+	var err error
+	if len(body.WaferIDs) > 0 {
+		parent, children, err = dao.SplitLotByWafer(database.GetDB(), id, body.WaferIDs)
+	} else {
+		parent, children, err = dao.SplitLot(database.GetDB(), id, body.Quantities)
+	}
 	if err != nil {
 		writeWipErr(c, err)
 		return

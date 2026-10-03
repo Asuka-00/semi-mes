@@ -7,6 +7,8 @@ import { fetchLotTrace, fetchTraceReverse, type TraceReport } from '@/service/ap
 import TraceTree from './tree.vue';
 
 const lotNo = ref('DEMO-WIP-001');
+const waferNo = ref('');
+const pickedWafer = ref('');
 const loading = ref(false);
 const report = ref<TraceReport | null>(null);
 const equipmentCode = ref('');
@@ -64,7 +66,7 @@ const reverseColumns: DataTableColumns<Record<string, any>> = [
 async function load() {
   if (!lotNo.value.trim()) return;
   loading.value = true;
-  const { data, error } = await fetchLotTrace(lotNo.value.trim());
+  const { data, error } = await fetchLotTrace(lotNo.value.trim(), waferNo.value.trim());
   loading.value = false;
   if (error || !data) {
     report.value = null;
@@ -72,6 +74,7 @@ async function load() {
     return;
   }
   report.value = data;
+  pickedWafer.value = data.wafers?.[0]?.waferNo || '';
 }
 
 async function reverse() {
@@ -110,6 +113,12 @@ function exportReport() {
   for (const item of current.measurements || []) {
     rows.push(['measurement', current.lot.lotNo, `${item.paramCode} ${item.value} ${item.specResult || ''}`]);
   }
+  for (const wafer of current.wafers || []) {
+    rows.push(['wafer', current.lot.lotNo, `${wafer.waferNo} ${wafer.slot} ${wafer.status} ${wafer.carrierNo || ''}`]);
+    for (const event of wafer.history || []) {
+      rows.push(['wafer-history', wafer.waferNo, `${event.eventType} ${event.reasonCode || ''} ${event.toNodeKey || ''}`]);
+    }
+  }
   downloadCsv(`trace-${current.lot.lotNo}`, ['section', 'lot', 'detail'], rows.slice(1).length ? rows.slice(1) : rows);
 }
 
@@ -132,11 +141,11 @@ load();
     <NCard :bordered="false" class="card-wrapper" :title="$t('page.mes.trace.title')">
       <NSpace class="mb-12px" wrap>
         <NInput v-model:value="lotNo" :placeholder="$t('page.mes.trace.lotNo')" class="w-220px" clearable @keyup.enter="load" />
+        <NInput v-model:value="waferNo" :placeholder="$t('page.mes.wafer.filter')" class="w-180px" clearable @keyup.enter="load" />
         <NButton type="primary" :loading="loading" @click="load">{{ $t('page.mes.trace.load') }}</NButton>
         <NButton :disabled="!report" @click="exportReport">{{ $t('page.mes.trace.export') }}</NButton>
         <NButton :disabled="!report" @click="printReport">{{ $t('page.mes.trace.print') }}</NButton>
       </NSpace>
-      <div class="mb-12px text-13px text-#888">{{ $t('page.mes.trace.wafersLater') }}</div>
       <div id="trace-report">
         <template v-if="report">
           <div class="mb-12px">
@@ -164,6 +173,32 @@ load();
           <NDataTable size="small" :columns="defectColumns" :data="report.defects || []" />
           <NDivider>{{ $t('page.mes.trace.measurements') }}</NDivider>
           <NDataTable size="small" :columns="measureColumns" :data="report.measurements || []" />
+          <NDivider>{{ $t('page.mes.wafer.title') }}</NDivider>
+          <NDataTable
+            size="small"
+            :columns="[
+              { title: $t('page.mes.wafer.no'), key: 'waferNo' },
+              { title: $t('page.mes.wafer.slot'), key: 'slot', width: 80 },
+              { title: $t('page.mes.wafer.status'), key: 'status', width: 120 },
+              { title: $t('page.mes.carrier.no'), key: 'carrierNo', minWidth: 140 }
+            ]"
+            :data="report.wafers || []"
+            :row-props="(row: Record<string, any>) => ({ style: 'cursor: pointer', onClick: () => (pickedWafer = row.waferNo) })"
+          />
+          <div v-if="!(report.wafers || []).length" class="mb-12px text-13px text-#888">{{ $t('page.mes.trace.wafersLater') }}</div>
+          <div class="mb-8px mt-12px font-600">{{ $t('page.mes.wafer.history') }} {{ pickedWafer }}</div>
+          <NDataTable
+            size="small"
+            :columns="[
+              { title: $t('page.mes.wip.event'), key: 'eventType', width: 120 },
+              { title: $t('page.mes.wip.fromNode'), key: 'fromNodeKey', width: 120 },
+              { title: $t('page.mes.wip.toNode'), key: 'toNodeKey', width: 120 },
+              { title: $t('page.mes.wafer.slot'), key: 'toSlot', width: 80 },
+              { title: $t('page.mes.wip.reasonCode'), key: 'reasonCode', width: 120 },
+              { title: $t('page.mes.audit.time'), key: 'createdAt', minWidth: 170 }
+            ]"
+            :data="(report.wafers || []).find(item => item.waferNo === pickedWafer)?.history || []"
+          />
         </template>
       </div>
     </NCard>

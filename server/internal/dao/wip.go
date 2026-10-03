@@ -280,6 +280,9 @@ func StartLot(db *gorm.DB, orderID uint64, qty int, lotType string) (*model.WipL
 		}).Error; err != nil {
 			return err
 		}
+		if err := createLotWafers(tx, lot, now); err != nil {
+			return err
+		}
 		status := model.OrderInProgress
 		if err := tx.Model(order).Updates(map[string]any{
 			"next_lot_seq": order.NextLotSeq, "released_qty": order.ReleasedQty + qty, "status": status,
@@ -421,6 +424,18 @@ func ReleaseHoldLot(db *gorm.DB, id uint64, reasonCode, reason string) (*model.W
 
 // SplitLot keeps the remainder on the parent and opens a child lot for each quantity.
 func SplitLot(db *gorm.DB, id uint64, quantities []int) (*model.WipLot, []model.WipLot, error) {
+	return splitLot(db, id, quantities, nil)
+}
+
+func SplitLotByWafer(db *gorm.DB, id uint64, groups [][]uint64) (*model.WipLot, []model.WipLot, error) {
+	quantities := make([]int, len(groups))
+	for i, group := range groups {
+		quantities[i] = len(group)
+	}
+	return splitLot(db, id, quantities, groups)
+}
+
+func splitLot(db *gorm.DB, id uint64, quantities []int, groups [][]uint64) (*model.WipLot, []model.WipLot, error) {
 	if len(quantities) == 0 {
 		return nil, nil, ErrWipQty
 	}
@@ -448,12 +463,11 @@ func SplitLot(db *gorm.DB, id uint64, quantities []int) (*model.WipLot, []model.
 		if err != nil {
 			return err
 		}
-		parentQty := lot.Quantity
-		lot.Quantity = parentQty - sum
+		lot.Quantity -= sum
 		if err := tx.Model(lot).Update("quantity", lot.Quantity).Error; err != nil {
 			return err
 		}
-		for _, q := range quantities {
+		for i, q := range quantities {
 			childNo, err := Allocate(tx, model.RuleLot, time.Now())
 			if err != nil {
 				return err
@@ -483,7 +497,17 @@ func SplitLot(db *gorm.DB, id uint64, quantities []int) (*model.WipLot, []model.
 			}).Error; err != nil {
 				return err
 			}
+			var ids []uint64
+			if groups != nil {
+				ids = groups[i]
+			}
+			if err := moveSplitWafers(tx, lot, &child, q, ids); err != nil {
+				return err
+			}
 			children = append(children, child)
+		}
+		if err := finishSplitSlots(tx, lot.ID); err != nil {
+			return err
 		}
 		if err := tx.Model(order).Update("next_lot_seq", order.NextLotSeq).Error; err != nil {
 			return err
@@ -536,6 +560,9 @@ func MergeLots(db *gorm.DB, targetID uint64, sourceIDs []uint64) (*model.WipLot,
 			if err := tx.Create(&model.WipLotHistory{
 				LotID: lot.ID, EventType: model.EventMerge, ToNodeKey: lot.CurrentNodeKey, Quantity: moved, RelatedLotID: src.ID,
 			}).Error; err != nil {
+				return err
+			}
+			if err := moveMergeWafers(tx, src.ID, lot.ID); err != nil {
 				return err
 			}
 			lot.Quantity += moved
@@ -756,6 +783,9 @@ func completeLot(tx *gorm.DB, lot *model.WipLot, from string, result routegraph.
 	if err := tx.Create(&model.WipLotHistory{
 		LotID: lot.ID, EventType: model.EventComplete, FromNodeKey: from, ToNodeKey: from, Reason: result.Reason, Quantity: lot.Quantity,
 	}).Error; err != nil {
+		return err
+	}
+	if err := completeLotWafers(tx, lot.ID); err != nil {
 		return err
 	}
 	return refreshOrder(tx, lot.OrderID)

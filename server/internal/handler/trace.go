@@ -16,6 +16,7 @@ import (
 type traceBody struct {
 	LotID         uint64 `json:"lotId"`
 	LotNo         string `json:"lotNo"`
+	WaferNo       string `json:"waferNo"`
 	EquipmentID   uint64 `json:"equipmentId"`
 	EquipmentCode string `json:"equipmentCode"`
 	RecipeID      uint64 `json:"recipeId"`
@@ -43,11 +44,19 @@ func TraceLot(c *gin.Context) {
 		}
 		id = found
 	}
+	if id == 0 && strings.TrimSpace(body.WaferNo) != "" {
+		found, err := dao.FindLotByWafer(database.GetDB(), body.WaferNo)
+		if err != nil {
+			writeWipErr(c, err)
+			return
+		}
+		id = found
+	}
 	if id == 0 {
 		response.Error(c, ecode.InvalidParams)
 		return
 	}
-	writeTrace(c, id)
+	writeTrace(c, id, body.WaferNo)
 }
 
 // TraceLotByID loads the trace report for the path id.
@@ -57,11 +66,11 @@ func TraceLotByID(c *gin.Context) {
 		response.Error(c, ecode.InvalidParams)
 		return
 	}
-	writeTrace(c, id)
+	writeTrace(c, id, c.Query("waferNo"))
 }
 
-func writeTrace(c *gin.Context, id uint64) {
-	report, err := dao.LotTrace(database.GetDB(), id)
+func writeTrace(c *gin.Context, id uint64, waferNo string) {
+	report, err := dao.LotTrace(database.GetDB(), id, waferNo)
 	if err != nil {
 		writeWipErr(c, err)
 		return

@@ -94,7 +94,31 @@ type TraceReport struct {
 	Moves        []TraceMove           `json:"moves"`
 	Defects      []model.QcDefect      `json:"defects"`
 	Measurements []model.QcMeasurement `json:"measurements"`
-	Wafers       []any                 `json:"wafers"`
+	Wafers       []TraceWafer          `json:"wafers"`
+}
+
+// TraceWafer is one wafer and the events recorded against it.
+type TraceWafer struct {
+	ID        uint64            `json:"id"`
+	WaferNo   string            `json:"waferNo"`
+	Slot      int               `json:"slot"`
+	Status    string            `json:"status"`
+	CarrierNo string            `json:"carrierNo"`
+	History   []TraceWaferEvent `json:"history" gorm:"-"`
+}
+
+// TraceWaferEvent is one wafer history row inside a lot trace.
+type TraceWaferEvent struct {
+	ID          uint64     `json:"id" gorm:"column:id"`
+	WaferID     uint64     `json:"waferId" gorm:"column:wafer_id"`
+	EventType   string     `json:"eventType" gorm:"column:event_type"`
+	MoveID      uint64     `json:"moveId" gorm:"column:move_id"`
+	FromNodeKey string     `json:"fromNodeKey" gorm:"column:from_node_key"`
+	ToNodeKey   string     `json:"toNodeKey" gorm:"column:to_node_key"`
+	FromSlot    int        `json:"fromSlot" gorm:"column:from_slot"`
+	ToSlot      int        `json:"toSlot" gorm:"column:to_slot"`
+	ReasonCode  string     `json:"reasonCode" gorm:"column:reason_code"`
+	CreatedAt   *time.Time `json:"createdAt" gorm:"column:created_at"`
 }
 
 // TraceReverseQuery filters lots that passed a tool, recipe, operation, or time window.
@@ -109,7 +133,7 @@ type TraceReverseQuery struct {
 }
 
 // LotTrace builds the genealogy and the step, hold, inspection, and defect history.
-func LotTrace(db *gorm.DB, lotID uint64) (*TraceReport, error) {
+func LotTrace(db *gorm.DB, lotID uint64, waferNo string) (*TraceReport, error) {
 	var lot model.WipLot
 	if err := db.First(&lot, lotID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -125,7 +149,7 @@ func LotTrace(db *gorm.DB, lotID uint64) (*TraceReport, error) {
 		},
 		Backward: walkTrace(db, lot.ID, false, 0, map[uint64]struct{}{lot.ID: {}}),
 		Forward:  walkTrace(db, lot.ID, true, 0, map[uint64]struct{}{lot.ID: {}}),
-		Wafers:   []any{},
+		Wafers:   []TraceWafer{},
 	}
 	if report.Backward == nil {
 		report.Backward = []TraceNode{}
@@ -171,7 +195,71 @@ func LotTrace(db *gorm.DB, lotID uint64) (*TraceReport, error) {
 	if report.Measurements == nil {
 		report.Measurements = []model.QcMeasurement{}
 	}
+	wafers, err := traceWafers(db, lot.ID, waferNo)
+	if err != nil {
+		return nil, err
+	}
+	report.Wafers = wafers
 	return report, nil
+}
+
+func FindLotByWafer(db *gorm.DB, waferNo string) (uint64, error) {
+	var wafer model.WipWafer
+	err := db.Where("wafer_no = ?", strings.TrimSpace(waferNo)).First(&wafer).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return 0, ErrWipNotFound
+	}
+	return wafer.LotID, err
+}
+
+func traceWafers(db *gorm.DB, lotID uint64, waferNo string) ([]TraceWafer, error) {
+	q := db.Table("wip_wafer w").
+		Select("w.id, w.wafer_no, w.slot, w.status, c.carrier_no").
+		Joins("LEFT JOIN wip_carrier c ON c.id = w.carrier_id AND c.deleted_at IS NULL").
+		Where("w.lot_id = ?", lotID)
+	if strings.TrimSpace(waferNo) != "" {
+		q = q.Where("w.wafer_no = ?", strings.TrimSpace(waferNo))
+	}
+	type waferScan struct {
+		ID        uint64 `gorm:"column:id"`
+		WaferNo   string `gorm:"column:wafer_no"`
+		Slot      int    `gorm:"column:slot"`
+		Status    string `gorm:"column:status"`
+		CarrierNo string `gorm:"column:carrier_no"`
+	}
+	var scanned []waferScan
+	if err := q.Order("w.slot ASC, w.id ASC").Scan(&scanned).Error; err != nil {
+		return nil, err
+	}
+	rows := make([]TraceWafer, 0, len(scanned))
+	for _, item := range scanned {
+		rows = append(rows, TraceWafer{ID: item.ID, WaferNo: item.WaferNo, Slot: item.Slot, Status: item.Status, CarrierNo: item.CarrierNo})
+	}
+	if strings.TrimSpace(waferNo) != "" && len(rows) == 0 {
+		return nil, ErrWipNotFound
+	}
+	if len(rows) == 0 {
+		return []TraceWafer{}, nil
+	}
+	ids := make([]uint64, 0, len(rows))
+	for i := range rows {
+		ids = append(ids, rows[i].ID)
+		rows[i].History = []TraceWaferEvent{}
+	}
+	var events []TraceWaferEvent
+	if err := db.Table("wip_wafer_history").Where("wafer_id IN ?", ids).Order("id ASC").Scan(&events).Error; err != nil {
+		return nil, err
+	}
+	byWafer := map[uint64][]TraceWaferEvent{}
+	for _, event := range events {
+		byWafer[event.WaferID] = append(byWafer[event.WaferID], event)
+	}
+	for i := range rows {
+		if history := byWafer[rows[i].ID]; history != nil {
+			rows[i].History = history
+		}
+	}
+	return rows, nil
 }
 
 // FindLotByNo returns the lot id for a lot number.

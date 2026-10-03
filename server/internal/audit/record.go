@@ -222,6 +222,12 @@ func suffixAction(suffix, fallback string) string {
 		return "release_order"
 	case "complete":
 		return "complete"
+	case "bind":
+		return "bind"
+	case "unbind":
+		return "unbind"
+	case "scrap":
+		return "scrap"
 	case "pass":
 		return "pass"
 	case "advance":
@@ -291,6 +297,8 @@ func resourceMeta(name string) (string, string) {
 		return "system", "mes_reason_code"
 	case "sysNumberRule":
 		return "system", "sys_number_rule"
+	case "wipCarrier":
+		return "wip", "wip_carrier"
 	default:
 		return name, ""
 	}
@@ -456,7 +464,7 @@ func entityCode(before, after string) string {
 		if json.Unmarshal([]byte(raw), &row) != nil {
 			continue
 		}
-		for _, key := range []string{"lot_no", "order_no", "factory_code", "equipment_code", "username", "product_code", "defect_code", "role_code", "recipe_code", "workshop_code", "line_code", "plan_name", "task_no", "type_code", "item_code", "reason_code", "rule_code"} {
+		for _, key := range []string{"lot_no", "order_no", "factory_code", "equipment_code", "username", "product_code", "defect_code", "role_code", "recipe_code", "workshop_code", "line_code", "plan_name", "task_no", "type_code", "item_code", "reason_code", "rule_code", "carrier_no", "wafer_no"} {
 			if text, ok := row[key].(string); ok && text != "" {
 				return text
 			}

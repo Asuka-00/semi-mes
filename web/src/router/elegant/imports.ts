@@ -48,6 +48,7 @@ export const views: Record<LastLevelRouteKey, RouteComponent | (() => Promise<Ro
   system_reason: () => import("@/views/system/reason/index.vue"),
   system_role: () => import("@/views/system/role/index.vue"),
   system_user: () => import("@/views/system/user/index.vue"),
+  wip_carrier: () => import("@/views/wip/carrier/index.vue"),
   wip_move: () => import("@/views/wip/move/index.vue"),
   wip_overview: () => import("@/views/wip/overview/index.vue"),
   wip_station: () => import("@/views/wip/station/index.vue"),

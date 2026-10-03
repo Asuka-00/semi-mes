@@ -14,6 +14,7 @@ type trackInBody struct {
 	LotID       uint64 `json:"lotId"`
 	EquipmentID uint64 `json:"equipmentId"`
 	RecipeID    uint64 `json:"recipeId"`
+	CarrierNo   string `json:"carrierNo"`
 }
 
 type sampleBody struct {
@@ -68,7 +69,7 @@ func TrackIn(c *gin.Context) {
 	}
 	op, _ := currentUserID(c)
 	lot, move, err := dao.TrackIn(database.GetDB(), dao.TrackInInput{
-		LotID: body.LotID, EquipmentID: body.EquipmentID, RecipeID: body.RecipeID, OperatorID: op,
+		LotID: body.LotID, EquipmentID: body.EquipmentID, RecipeID: body.RecipeID, OperatorID: op, CarrierNo: body.CarrierNo,
 	})
 	if err != nil {
 		writeWipErr(c, err)

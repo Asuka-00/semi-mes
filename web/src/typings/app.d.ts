@@ -645,6 +645,41 @@ declare namespace App {
             cat_eqp_down: string;
             cat_eqp: string;
           };
+          carrier: {
+            title: string;
+            no: string;
+            type: string;
+            capacity: string;
+            status: string;
+            location: string;
+            cleanCount: string;
+            cleanLimit: string;
+            note: string;
+            bind: string;
+            unbind: string;
+            lotId: string;
+            slots: string;
+            emptySlot: string;
+            empty: string;
+            inUse: string;
+            cleaning: string;
+            down: string;
+            foup: string;
+            cassette: string;
+          };
+          wafer: {
+            title: string;
+            no: string;
+            slot: string;
+            status: string;
+            scrap: string;
+            split: string;
+            active: string;
+            scrapped: string;
+            completed: string;
+            history: string;
+            filter: string;
+          };
           number: {
             title: string;
             ruleCode: string;

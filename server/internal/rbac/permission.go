@@ -29,6 +29,7 @@ var resources = []resource{
 	{"/api/v1/wipWorkOrder", "wo:order"},
 	{"/api/v1/wipLot", "lot:lot"},
 	{"/api/v1/wipMove", "wip:move"},
+	{"/api/v1/wipCarrier", "wip:carrier"},
 	{"/api/v1/eqpPmTask", "eqp:pm"},
 	{"/api/v1/eqpPmPlan", "eqp:pm"},
 	{"/api/v1/eqpEquipment", "eqp:equipment"},
@@ -112,7 +113,8 @@ func permissionCode(method, fullPath string) string {
 			case strings.HasSuffix(fullPath, "/state"), strings.HasSuffix(fullPath, "/start"),
 				strings.HasSuffix(fullPath, "/complete"), strings.HasSuffix(fullPath, "/generate"):
 				return item.perm + ":edit"
-			case strings.HasSuffix(fullPath, "/release"), strings.HasSuffix(fullPath, "/graph"),
+			case strings.HasSuffix(fullPath, "/bind"), strings.HasSuffix(fullPath, "/unbind"), strings.HasSuffix(fullPath, "/scrap"),
+				strings.HasSuffix(fullPath, "/release"), strings.HasSuffix(fullPath, "/graph"),
 				strings.HasSuffix(fullPath, "/start"), strings.HasSuffix(fullPath, "/close"),
 				strings.HasSuffix(fullPath, "/hold"), strings.HasSuffix(fullPath, "/releaseHold"),
 				strings.HasSuffix(fullPath, "/split"), strings.HasSuffix(fullPath, "/advance"),
