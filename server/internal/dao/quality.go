@@ -165,21 +165,35 @@ func SaveInspectPlan(db *gorm.DB, id uint64, in PlanInput) (*model.QcInspectPlan
 	return row, err
 }
 
-// ListInspectPlans returns enabled and disabled plans.
-func ListInspectPlans(db *gorm.DB) ([]PlanView, error) {
+// ListInspectPlans returns a filtered page of plans. limit <= 0 returns up to 500 rows.
+func ListInspectPlans(db *gorm.DB, page, limit int, columns []Column) ([]PlanView, int64, error) {
+	rest, enabled, hasEnabled := pullColumn(columns, "enabled")
+	q := applyColumns(db.Model(&model.QcInspectPlan{}), rest, map[string]string{
+		"plan_name": "plan_name", "operation_id": "operation_id", "product_id": "product_id", "created_at": "created_at",
+	})
+	if hasEnabled {
+		q = q.Where("enabled = ?", enabled == "1" || strings.EqualFold(enabled, "true"))
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if limit <= 0 || limit > 2000 {
+		limit = 500
+	}
 	var plans []model.QcInspectPlan
-	if err := db.Order("id").Find(&plans).Error; err != nil {
-		return nil, err
+	if err := q.Order("id").Offset(page * limit).Limit(limit).Find(&plans).Error; err != nil {
+		return nil, 0, err
 	}
 	out := make([]PlanView, 0, len(plans))
 	for _, plan := range plans {
 		view, err := planView(db, &plan)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		out = append(out, *view)
 	}
-	return out, nil
+	return out, total, nil
 }
 
 // DeleteInspectPlan soft-deletes a plan and its items.
@@ -707,14 +721,25 @@ func SaveDefectCode(db *gorm.DB, id uint64, code, name, category, severity strin
 	return &row, nil
 }
 
-// ListDefectCodes returns the master.
-func ListDefectCodes(db *gorm.DB) ([]model.QcDefectCode, error) {
+// ListDefectCodes returns a filtered page of the defect master.
+func ListDefectCodes(db *gorm.DB, page, limit int, columns []Column) ([]model.QcDefectCode, int64, error) {
+	q := applyColumns(db.Model(&model.QcDefectCode{}), columns, map[string]string{
+		"defect_code": "defect_code", "defect_name": "defect_name", "category": "category",
+		"severity": "severity", "status": "status", "created_at": "created_at",
+	})
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if limit <= 0 || limit > 2000 {
+		limit = 500
+	}
 	var rows []model.QcDefectCode
-	err := db.Order("defect_code").Find(&rows).Error
+	err := q.Order("defect_code").Offset(page * limit).Limit(limit).Find(&rows).Error
 	if rows == nil {
 		rows = []model.QcDefectCode{}
 	}
-	return rows, err
+	return rows, total, err
 }
 
 // RecordDefect stores the defect and applies scrap, hold, rework, or use-as-is.
@@ -816,22 +841,35 @@ type DefectView struct {
 	LotNo string `json:"lotNo"`
 }
 
-// ListDefects returns recent defect records.
-func ListDefects(db *gorm.DB, lotID uint64) ([]DefectView, error) {
+// ListDefects returns defect records. lotID > 0 keeps the legacy single-lot filter. limit <= 0 caps at 100.
+func ListDefects(db *gorm.DB, lotID uint64, page, limit int, columns []Column) ([]DefectView, int64, error) {
 	q := db.Table("qc_defect d").
 		Select("d.*, l.lot_no").
 		Joins("JOIN wip_lot l ON l.id = d.lot_id").
-		Where("d.deleted_at IS NULL").
-		Order("d.id desc").Limit(100)
+		Where("d.deleted_at IS NULL")
 	if lotID > 0 {
 		q = q.Where("d.lot_id = ?", lotID)
 	}
+	q = applyColumns(q, columns, map[string]string{
+		"lot_id": "d.lot_id", "lot_no": "l.lot_no", "defect_code": "d.defect_code",
+		"disposition": "d.disposition", "created_at": "d.created_at", "node_key": "d.node_key",
+	})
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 2000 {
+		limit = 2000
+	}
 	var rows []DefectView
-	err := q.Scan(&rows).Error
+	err := q.Order("d.id desc").Offset(page * limit).Limit(limit).Scan(&rows).Error
 	if rows == nil {
 		rows = []DefectView{}
 	}
-	return rows, err
+	return rows, total, err
 }
 
 func manualLimit(db *gorm.DB, param string, operationID, equipmentID uint64) (*model.QcSpcLimit, error) {

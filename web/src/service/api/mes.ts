@@ -45,6 +45,14 @@ export function mesDelete(resource: string, id: number) {
   });
 }
 
+export function mesBatch(data: { resource: string; action: string; ids: number[]; reasonCode?: string; reason?: string }) {
+  return request<{ ok: number[]; failed: Array<{ id: number; reason: string }> }>({
+    url: '/batch',
+    method: 'post',
+    data
+  });
+}
+
 export function mesGetUserRoles(id: number) {
   return request<{ roleIds: number[] }>({ url: `/sysUser/${id}/roles` });
 }

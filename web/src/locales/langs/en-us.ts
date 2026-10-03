@@ -376,6 +376,23 @@ const local: App.I18n.Schema = {
       }
     },
     mes: {
+      query: {
+        collapse: 'Hide filters',
+        expand: 'Show filters',
+        export: 'Export current result',
+        columns: 'Columns',
+        createdRange: 'Created',
+        sort: 'Sort',
+        batchDelete: 'Batch delete',
+        batchEnable: 'Batch enable',
+        batchDisable: 'Batch disable',
+        batchHold: 'Batch hold',
+        batchRelease: 'Batch release',
+        selected: '{count} selected',
+        exported: 'Exported {count} rows (CSV, max 2000)',
+        exportEmpty: 'Nothing to export',
+        partial: '{ok} succeeded, {failed} failed'
+      },
       enabled: 'Enabled',
       disabled: 'Disabled',
       yes: 'Yes',

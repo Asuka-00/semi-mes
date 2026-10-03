@@ -98,13 +98,16 @@ func ListWorkOrders(db *gorm.DB, page, limit int, sort string, columns []Column)
 		Where("o.deleted_at IS NULL")
 	q = applyColumns(q, columns, map[string]string{
 		"order_no": "o.order_no", "status": "o.status", "product_id": "o.product_id",
+		"product_code": "p.product_code", "due_date": "o.due_date", "created_at": "o.created_at",
 	})
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 	var rows []WorkOrderView
-	err := q.Order(orderClause(sort, map[string]string{"id": "o.id", "order_no": "o.order_no"}, "o.id DESC")).
+	err := q.Order(orderClause(sort, map[string]string{
+		"id": "o.id", "order_no": "o.order_no", "status": "o.status", "due_date": "o.due_date", "created_at": "o.created_at",
+	}, "o.id DESC")).
 		Offset(page * limit).Limit(limit).Scan(&rows).Error
 	for i := range rows {
 		rows[i].DueDateText = formatDate(rows[i].DueDate)
@@ -287,16 +290,21 @@ func ListLots(db *gorm.DB, page, limit int, sort string, columns []Column) ([]Lo
 		Joins("LEFT JOIN base_route_version v ON v.id = l.route_version_id").
 		Joins("LEFT JOIN base_process_route r ON r.id = v.route_id").
 		Joins("LEFT JOIN base_route_node n ON n.version_id = l.route_version_id AND n.node_key = l.current_node_key AND n.deleted_at IS NULL").
+		Joins("LEFT JOIN base_product p ON p.id = l.product_id").
 		Where("l.deleted_at IS NULL")
 	q = applyColumns(q, columns, map[string]string{
 		"lot_no": "l.lot_no", "status": "l.status", "order_id": "l.order_id",
+		"product_id": "l.product_id", "product_code": "p.product_code", "created_at": "l.created_at",
+		"hold_reason_code": "l.hold_reason_code",
 	})
 	var total int64
 	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 	var rows []LotView
-	err := q.Order(orderClause(sort, map[string]string{"id": "l.id", "lot_no": "l.lot_no"}, "l.id DESC")).
+	err := q.Order(orderClause(sort, map[string]string{
+		"id": "l.id", "lot_no": "l.lot_no", "status": "l.status", "created_at": "l.created_at",
+	}, "l.id DESC")).
 		Offset(page * limit).Limit(limit).Scan(&rows).Error
 	return rows, total, err
 }
@@ -867,21 +875,88 @@ func encodeRework(m map[string]int) string {
 func applyColumns(q *gorm.DB, columns []Column, allow map[string]string) *gorm.DB {
 	for _, col := range columns {
 		field, ok := allow[col.Name]
-		if !ok || col.Value == "" {
+		if !ok {
 			continue
 		}
-		switch strings.ToLower(col.Exp) {
+		switch strings.ToLower(strings.TrimSpace(col.Exp)) {
 		case "like":
+			if strings.TrimSpace(col.Value) == "" {
+				continue
+			}
 			value := col.Value
 			if !strings.Contains(value, "%") {
 				value = "%" + value + "%"
 			}
 			q = q.Where(field+" LIKE ?", value)
+		case "in":
+			vals := splitFilter(col.Value)
+			if len(vals) == 0 {
+				continue
+			}
+			q = q.Where(field+" IN ?", vals)
+		case "gte", ">=":
+			if col.Value == "" {
+				continue
+			}
+			q = q.Where(field+" >= ?", col.Value)
+		case "lte", "<=":
+			if col.Value == "" {
+				continue
+			}
+			q = q.Where(field+" <= ?", col.Value)
+		case "gt", ">":
+			if col.Value == "" {
+				continue
+			}
+			q = q.Where(field+" > ?", col.Value)
+		case "lt", "<":
+			if col.Value == "" {
+				continue
+			}
+			q = q.Where(field+" < ?", col.Value)
+		case "neq", "!=":
+			if col.Value == "" {
+				continue
+			}
+			q = q.Where(field+" <> ?", col.Value)
+		case "isnull":
+			q = q.Where(field + " IS NULL")
 		default:
+			if col.Value == "" {
+				continue
+			}
 			q = q.Where(field+" = ?", col.Value)
 		}
 	}
 	return q
+}
+
+// pullColumn removes the first column with name and returns its value.
+func pullColumn(columns []Column, name string) ([]Column, string, bool) {
+	rest := make([]Column, 0, len(columns))
+	value := ""
+	found := false
+	for _, col := range columns {
+		if !found && col.Name == name {
+			value = col.Value
+			found = true
+			continue
+		}
+		rest = append(rest, col)
+	}
+	return rest, value, found
+}
+
+func splitFilter(value string) []string {
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 func orderClause(sort string, allow map[string]string, fallback string) string {

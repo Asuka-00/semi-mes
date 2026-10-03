@@ -65,6 +65,7 @@ func Seed(db *gorm.DB) error {
 		&model.QcSpcLimit{},
 		&model.QcSpcEvent{},
 		&model.SysNotification{},
+		&model.SysUserPref{},
 	); err != nil {
 		return err
 	}

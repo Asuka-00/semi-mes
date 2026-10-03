@@ -3,8 +3,11 @@ import { computed, h, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import type { DataTableColumns, DataTableRowKey } from 'naive-ui';
 import { NButton, NSpace, NTag } from 'naive-ui';
+import ColumnPicker from '@/components/mes/column-picker.vue';
 import { useAuth } from '@/hooks/business/auth';
+import { downloadCsv, keepColumn, loadPagePref, moveKey, orderedKeys, rangeColumns, savePagePref } from '@/hooks/business/list-kit';
 import { $t } from '@/locales';
+import { mesBatch } from '@/service/api/mes';
 import { fetchLots, holdLot, mergeLots, releaseHold, splitLot } from '@/service/api/wip';
 import type { LotRow } from '@/service/api/wip';
 
@@ -18,6 +21,15 @@ const total = ref(0);
 const page = ref(1);
 const pageSize = ref(10);
 const keyword = ref('');
+const statuses = ref<string[]>([]);
+const productCode = ref('');
+const createdRange = ref<[number, number] | null>(null);
+const sort = ref('-id');
+const collapsed = ref(false);
+const hidden = ref<string[]>([]);
+const columnOrder = ref<string[]>([]);
+const prefsReady = ref(false);
+const batchMode = ref(false);
 const checked = ref<DataTableRowKey[]>([]);
 
 const holdOpen = ref(false);
@@ -42,7 +54,22 @@ function statusLabel(status: string) {
   return $t((map[status] || 'page.mes.wip.status') as App.I18n.I18nKey);
 }
 
-const columns = computed<DataTableColumns<LotRow>>(() => [
+const dataColumns = computed(() => [
+  { key: 'lotNo', label: $t('page.mes.wip.lotNo') },
+  { key: 'orderNo', label: $t('page.mes.wip.orderNo') },
+  { key: 'quantity', label: $t('page.mes.wip.quantity') },
+  { key: 'lotType', label: $t('page.mes.wip.lotType') },
+  { key: 'nodeName', label: $t('page.mes.wip.currentNode') },
+  { key: 'status', label: $t('page.mes.wip.status') }
+]);
+
+const statusOptions = computed(() =>
+  ['waiting', 'running', 'hold', 'scrapped', 'completed', 'merged'].map(value => ({ label: statusLabel(value), value }))
+);
+
+const columns = computed<DataTableColumns<LotRow>>(() => {
+  const visible = new Set(orderedKeys(dataColumns.value.map(item => item.key), columnOrder.value).filter(key => !hidden.value.includes(key)));
+  const all: DataTableColumns<LotRow> = [
   { type: 'selection' },
   { title: $t('page.mes.wip.lotNo'), key: 'lotNo', minWidth: 150 },
   { title: $t('page.mes.wip.orderNo'), key: 'orderNo', minWidth: 120 },
@@ -82,15 +109,37 @@ const columns = computed<DataTableColumns<LotRow>>(() => [
       return h(NSpace, { size: 8 }, { default: () => buttons });
     }
   }
-]);
+  ];
+  return all.filter(column => keepColumn(column, visible));
+});
+
+function filters() {
+  const query: Array<{ name: string; exp: string; value: string; logic: string }> = [];
+  if (keyword.value) query.push({ name: 'lot_no', exp: 'like', value: keyword.value, logic: 'and' });
+  if (statuses.value.length) query.push({ name: 'status', exp: 'in', value: statuses.value.join(','), logic: 'and' });
+  if (productCode.value) query.push({ name: 'product_code', exp: 'like', value: productCode.value, logic: 'and' });
+  return [...query, ...rangeColumns('created_at', createdRange.value)];
+}
+
+async function persist() {
+  if (!prefsReady.value) return;
+  await savePagePref('wipLot', {
+    search: { keyword: keyword.value, statuses: statuses.value, productCode: productCode.value },
+    hidden: hidden.value,
+    order: columnOrder.value,
+    collapsed: collapsed.value,
+    sort: sort.value,
+    createdRange: createdRange.value
+  });
+}
 
 async function load() {
   loading.value = true;
   const { data, error } = await fetchLots({
     page: page.value - 1,
     limit: pageSize.value,
-    sort: '-id',
-    columns: keyword.value ? [{ name: 'lot_no', exp: 'like', value: keyword.value, logic: 'and' }] : undefined
+    sort: sort.value,
+    columns: filters()
   });
   loading.value = false;
   if (error || !data) return;
@@ -100,10 +149,44 @@ async function load() {
 
 function search() {
   page.value = 1;
+  persist();
   load();
 }
 
+function reset() {
+  keyword.value = '';
+  statuses.value = [];
+  productCode.value = '';
+  createdRange.value = null;
+  sort.value = '-id';
+  search();
+}
+
+async function exportRows() {
+  const { data, error } = await fetchLots({ page: 0, limit: 2000, sort: sort.value, columns: filters() });
+  if (error || !data?.wipLots?.length) {
+    window.$message?.warning($t('page.mes.query.exportEmpty'));
+    return;
+  }
+  const keys = orderedKeys(dataColumns.value.map(item => item.key), columnOrder.value).filter(key => !hidden.value.includes(key));
+  downloadCsv(
+    'lots',
+    keys.map(key => dataColumns.value.find(item => item.key === key)?.label || key),
+    data.wipLots.map(row => keys.map(key => String((row as unknown as Record<string, unknown>)[key] ?? '')))
+  );
+  window.$message?.success($t('page.mes.query.exported', { count: data.wipLots.length }));
+}
+
+function openBatch(release: boolean) {
+  batchMode.value = true;
+  holdRelease.value = release;
+  reasonCode.value = release ? 'RELEASE' : 'HOLD';
+  reason.value = '';
+  holdOpen.value = true;
+}
+
 function openHold(id: number, release: boolean) {
+  batchMode.value = false;
   holdId.value = id;
   holdRelease.value = release;
   reasonCode.value = release ? 'RELEASE' : 'HOLD';
@@ -112,6 +195,22 @@ function openHold(id: number, release: boolean) {
 }
 
 async function submitHold() {
+  if (batchMode.value) {
+    const ids = checked.value.map(item => Number(item));
+    const { data, error } = await mesBatch({
+      resource: 'wipLot',
+      action: holdRelease.value ? 'release' : 'hold',
+      ids,
+      reasonCode: reasonCode.value,
+      reason: reason.value
+    });
+    if (error || !data) return;
+    holdOpen.value = false;
+    checked.value = [];
+    window.$message?.success($t('page.mes.query.partial', { ok: data.ok?.length || 0, failed: data.failed?.length || 0 }));
+    load();
+    return;
+  }
   const call = holdRelease.value ? releaseHold : holdLot;
   const { error } = await call(holdId.value, reasonCode.value, reason.value);
   if (error) return;
@@ -147,17 +246,47 @@ async function submitMerge() {
   load();
 }
 
-onMounted(load);
+onMounted(async () => {
+  const pref = await loadPagePref('wipLot');
+  keyword.value = String(pref.search?.keyword || '');
+  statuses.value = Array.isArray(pref.search?.statuses) ? (pref.search?.statuses as string[]) : [];
+  productCode.value = String(pref.search?.productCode || '');
+  hidden.value = pref.hidden || [];
+  columnOrder.value = pref.order || dataColumns.value.map(item => item.key);
+  collapsed.value = Boolean(pref.collapsed);
+  sort.value = pref.sort || '-id';
+  createdRange.value = pref.createdRange || null;
+  prefsReady.value = true;
+  load();
+});
 </script>
 
 <template>
   <NCard :bordered="false" class="card-wrapper">
-    <NSpace class="mb-12px" justify="space-between">
+    <NSpace class="mb-12px" justify="space-between" wrap>
       <NSpace>
-        <NInput v-model:value="keyword" :placeholder="$t('page.mes.wip.lotNo')" clearable class="w-220px" @keyup.enter="search" />
-        <NButton @click="search">{{ $t('common.search') }}</NButton>
+        <NButton @click="collapsed = !collapsed; persist()">{{ collapsed ? $t('page.mes.query.expand') : $t('page.mes.query.collapse') }}</NButton>
+        <NButton @click="exportRows">{{ $t('page.mes.query.export') }}</NButton>
+        <ColumnPicker
+          :items="orderedKeys(dataColumns.map(item => item.key), columnOrder).map(key => dataColumns.find(item => item.key === key)!)"
+          :hidden="hidden"
+          @toggle="(key: string, shown: boolean) => { hidden = shown ? hidden.filter(item => item !== key) : [...hidden, key]; persist(); }"
+          @reorder="(key: string, dir: number) => { columnOrder = moveKey(columnOrder.length ? columnOrder : dataColumns.map(item => item.key), key, dir); persist(); }"
+        />
+        <NButton v-if="canEdit" :disabled="!checked.length" @click="openBatch(false)">{{ $t('page.mes.query.batchHold') }}</NButton>
+        <NButton v-if="canEdit" :disabled="!checked.length" @click="openBatch(true)">{{ $t('page.mes.query.batchRelease') }}</NButton>
+        <NButton v-if="canEdit" :disabled="checked.length < 2" type="primary" @click="submitMerge">{{ $t('page.mes.wip.merge') }}</NButton>
       </NSpace>
-      <NButton v-if="canEdit" :disabled="checked.length < 2" type="primary" @click="submitMerge">{{ $t('page.mes.wip.merge') }}</NButton>
+      <span v-if="checked.length">{{ $t('page.mes.query.selected', { count: checked.length }) }}</span>
+    </NSpace>
+    <NSpace v-show="!collapsed" class="mb-12px" wrap>
+      <NInput v-model:value="keyword" :placeholder="$t('page.mes.wip.lotNo')" clearable class="w-180px" @keyup.enter="search" />
+      <NInput v-model:value="productCode" :placeholder="$t('page.mes.wip.product')" clearable class="w-160px" @keyup.enter="search" />
+      <NSelect v-model:value="statuses" multiple clearable class="w-220px" :options="statusOptions" :placeholder="$t('page.mes.wip.status')" />
+      <NDatePicker v-model:value="createdRange" type="daterange" clearable />
+      <NSelect v-model:value="sort" class="w-140px" :options="[{ label: 'ID ↓', value: '-id' }, { label: 'ID ↑', value: 'id' }, { label: 'Lot ↑', value: 'lot_no' }, { label: 'Lot ↓', value: '-lot_no' }]" />
+      <NButton type="primary" @click="search">{{ $t('common.search') }}</NButton>
+      <NButton @click="reset">{{ $t('common.reset') }}</NButton>
     </NSpace>
     <NDataTable
       v-model:checked-row-keys="checked"

@@ -19,6 +19,7 @@ func init() {
 
 		plans := group.Group("/eqpPmPlan")
 		plans.GET("", handler.ListPmPlans)
+		plans.POST("/list", handler.ListPmPlanPage)
 		plans.POST("", handler.SavePmPlan)
 		plans.PUT("/:id", handler.SavePmPlan)
 		plans.DELETE("/:id", handler.DeletePmPlan)

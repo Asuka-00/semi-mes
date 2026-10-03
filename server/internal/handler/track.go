@@ -145,8 +145,8 @@ func ListMoves(c *gin.Context) {
 			return
 		}
 	}
-	page, limit, _, cols := body.query()
-	rows, total, err := dao.ListMoves(database.GetDB(), page, limit, cols)
+	page, limit, sort, cols := body.query()
+	rows, total, err := dao.ListMoves(database.GetDB(), page, limit, sort, cols)
 	if err != nil {
 		writeWipErr(c, err)
 		return
