@@ -887,7 +887,7 @@ func applyState(tx *gorm.DB, eqp *model.EqpEquipment, to, reasonCode, reason str
 			return ErrEqpState
 		}
 	}
-	if !system && !EqpReasonCodes[reasonCode] {
+	if !system && !AcceptCode(tx, "eqp", reasonCode, EqpReasonCodes) {
 		return ErrEqpState
 	}
 	if system && reasonCode == "" {

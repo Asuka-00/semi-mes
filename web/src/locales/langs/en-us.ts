@@ -235,6 +235,9 @@ const local: App.I18n.Schema = {
     system_role: 'Roles',
     system_menu: 'Menus',
     system_audit: 'Audit Log',
+    system_dict: 'Data Dictionary',
+    system_reason: 'Reason Codes',
+    system_number: 'Numbering Rules',
     'base-data': 'Base Data',
     'base-data_factory': 'Factory',
     'base-data_workshop': 'Workshop',
@@ -409,6 +412,43 @@ const local: App.I18n.Schema = {
         before: 'Before',
         after: 'After',
         emptyDiff: 'No field changes'
+      },
+      dict: {
+        typeCode: 'Type code',
+        typeName: 'Type name',
+        remark: 'Remark',
+        itemCode: 'Item code',
+        labelZh: 'Chinese label',
+        labelEn: 'English label',
+        color: 'Color',
+        tag: 'Tag',
+        sort: 'Sort'
+      },
+      reason: {
+        category: 'Category',
+        code: 'Reason code',
+        cat_hold: 'Hold',
+        cat_release: 'Release',
+        cat_scrap: 'Scrap',
+        cat_rework: 'Rework',
+        cat_eqp_down: 'Equipment down',
+        cat_eqp: 'Equipment state'
+      },
+      number: {
+        title: 'Numbering rules',
+        ruleCode: 'Rule code',
+        ruleName: 'Rule name',
+        prefix: 'Prefix',
+        datePart: 'Date part',
+        seqLength: 'Sequence length',
+        reset: 'Reset period',
+        separator: 'Separator',
+        preview: 'Preview',
+        daily: 'Daily',
+        monthly: 'Monthly',
+        yearly: 'Yearly',
+        never: 'Never',
+        auto: 'Leave blank to allocate from the rule'
       },
       trace: {
         title: 'Lot trace',

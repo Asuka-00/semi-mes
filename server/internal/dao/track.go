@@ -278,7 +278,7 @@ func TrackOut(db *gorm.DB, in TrackOutInput) (*model.WipLot, routegraph.Result, 
 		if in.QtyOut < 0 || in.QtyScrap < 0 || in.QtyOut+in.QtyScrap != move.QtyIn {
 			return ErrWipQty
 		}
-		if in.QtyScrap > 0 && !ScrapReasons[in.ScrapReasonCode] {
+		if in.QtyScrap > 0 && !AcceptCode(tx, "scrap", in.ScrapReasonCode, ScrapReasons) {
 			return ErrWipQty
 		}
 		graph, err := LoadRouteGraph(tx, row.RouteVersionID)

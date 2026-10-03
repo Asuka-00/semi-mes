@@ -231,6 +231,9 @@ const local: App.I18n.Schema = {
     system_role: '角色管理',
     system_menu: '菜单管理',
     system_audit: '操作审计',
+    system_dict: '数据字典',
+    system_reason: '原因代码',
+    system_number: '编号规则',
     'base-data': '基础数据',
     'base-data_factory': '工厂',
     'base-data_workshop': '车间',
@@ -405,6 +408,43 @@ const local: App.I18n.Schema = {
         before: '变更前',
         after: '变更后',
         emptyDiff: '没有字段差异'
+      },
+      dict: {
+        typeCode: '字典编码',
+        typeName: '字典名称',
+        remark: '备注',
+        itemCode: '条目编码',
+        labelZh: '中文名称',
+        labelEn: '英文名称',
+        color: '颜色',
+        tag: '标签',
+        sort: '排序'
+      },
+      reason: {
+        category: '类别',
+        code: '原因代码',
+        cat_hold: 'Hold',
+        cat_release: '解除 Hold',
+        cat_scrap: '报废',
+        cat_rework: '返工',
+        cat_eqp_down: '设备停机',
+        cat_eqp: '设备状态'
+      },
+      number: {
+        title: '编号规则',
+        ruleCode: '规则编码',
+        ruleName: '规则名称',
+        prefix: '前缀',
+        datePart: '日期段',
+        seqLength: '流水位数',
+        reset: '重置周期',
+        separator: '分隔符',
+        preview: '预览',
+        daily: '每日',
+        monthly: '每月',
+        yearly: '每年',
+        never: '不重置',
+        auto: '留空则按规则自动编号'
       },
       trace: {
         title: '批次追溯',

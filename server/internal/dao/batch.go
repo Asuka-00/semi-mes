@@ -49,6 +49,14 @@ func RunBatch(db *gorm.DB, resource, action string, ids []uint64, reasonCode, re
 		return batchStatus(db, func() any { return &model.SysRole{} }, action, ids, map[uint64]struct{}{1: {}})
 	case "sysMenu":
 		return batchStatus(db, func() any { return &model.SysMenu{} }, action, ids, nil)
+	case "sysDictType":
+		return batchStatus(db, func() any { return &model.SysDictType{} }, action, ids, nil)
+	case "sysDictItem":
+		return batchStatus(db, func() any { return &model.SysDictItem{} }, action, ids, nil)
+	case "sysReasonCode":
+		return batchStatus(db, func() any { return &model.MesReasonCode{} }, action, ids, nil)
+	case "sysNumberRule":
+		return batchStatus(db, func() any { return &model.SysNumberRule{} }, action, ids, nil)
 	case "qcDefectCode":
 		return batchStatus(db, func() any { return &model.QcDefectCode{} }, action, ids, nil)
 	case "eqpPmPlan":

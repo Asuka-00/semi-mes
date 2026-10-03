@@ -49,7 +49,10 @@ declare module "@elegant-router/types" {
     "quality_spc": "/quality/spc";
     "system": "/system";
     "system_audit": "/system/audit";
+    "system_dict": "/system/dict";
     "system_menu": "/system/menu";
+    "system_number": "/system/number";
+    "system_reason": "/system/reason";
     "system_role": "/system/role";
     "system_user": "/system/user";
     "wip": "/wip";
@@ -145,7 +148,10 @@ declare module "@elegant-router/types" {
     | "quality_plan"
     | "quality_spc"
     | "system_audit"
+    | "system_dict"
     | "system_menu"
+    | "system_number"
+    | "system_reason"
     | "system_role"
     | "system_user"
     | "wip_move"

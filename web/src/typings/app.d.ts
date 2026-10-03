@@ -623,6 +623,43 @@ declare namespace App {
             after: string;
             emptyDiff: string;
           };
+          dict: {
+            typeCode: string;
+            typeName: string;
+            remark: string;
+            itemCode: string;
+            labelZh: string;
+            labelEn: string;
+            color: string;
+            tag: string;
+            sort: string;
+          };
+          reason: {
+            category: string;
+            code: string;
+            cat_hold: string;
+            cat_release: string;
+            cat_scrap: string;
+            cat_rework: string;
+            cat_eqp_down: string;
+            cat_eqp: string;
+          };
+          number: {
+            title: string;
+            ruleCode: string;
+            ruleName: string;
+            prefix: string;
+            datePart: string;
+            seqLength: string;
+            reset: string;
+            separator: string;
+            preview: string;
+            daily: string;
+            monthly: string;
+            yearly: string;
+            never: string;
+            auto: string;
+          };
           trace: {
             title: string;
             lotNo: string;

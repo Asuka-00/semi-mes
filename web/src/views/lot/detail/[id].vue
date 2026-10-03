@@ -7,6 +7,7 @@ import { Controls } from '@vue-flow/controls';
 import { MiniMap } from '@vue-flow/minimap';
 import type { DataTableColumns } from 'naive-ui';
 import { useAuth } from '@/hooks/business/auth';
+import { useReasonOptions } from '@/hooks/business/dict';
 import { $t } from '@/locales';
 import { advanceLot, fetchLot, holdLot, releaseHold } from '@/service/api/wip';
 import '@vue-flow/core/dist/style.css';
@@ -32,6 +33,9 @@ const defectCode = ref('');
 const resultText = ref('');
 const reasonCode = ref('HOLD');
 const reason = ref('');
+const { options: holdReasons } = useReasonOptions('hold', () => [{ label: 'HOLD', value: 'HOLD' }]);
+const { options: releaseReasons } = useReasonOptions('release', () => [{ label: 'RELEASE', value: 'RELEASE' }]);
+const reasonOptions = computed(() => (lot.value?.status === 'hold' ? releaseReasons.value : holdReasons.value));
 
 const lotId = computed(() => Number(props.id || route.params.id));
 const lotFlow = ref<HTMLElement | null>(null);
@@ -166,6 +170,12 @@ async function release() {
 
 onMounted(load);
 watch(lotId, load);
+watch(
+  () => lot.value?.status,
+  status => {
+    reasonCode.value = status === 'hold' ? 'RELEASE' : 'HOLD';
+  }
+);
 </script>
 
 <template>
@@ -197,7 +207,7 @@ watch(lotId, load);
       </NGi>
       <NGi>
         <NSpace>
-          <NInput v-model:value="reasonCode" class="w-140px" :placeholder="$t('page.mes.wip.reasonCode')" />
+          <NSelect v-model:value="reasonCode" class="w-180px" :options="reasonOptions" :placeholder="$t('page.mes.wip.reasonCode')" />
           <NInput v-model:value="reason" class="w-200px" :placeholder="$t('page.mes.wip.reason')" />
           <NButton v-if="lot.status === 'waiting'" @click="hold">{{ $t('page.mes.wip.holdAction') }}</NButton>
           <NButton v-else type="primary" @click="release">{{ $t('page.mes.wip.releaseHold') }}</NButton>

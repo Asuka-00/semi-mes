@@ -5,6 +5,7 @@ import type { DataTableColumns, DataTableRowKey, FormInst, FormRules } from 'nai
 import { NButton, NPopconfirm, NTag } from 'naive-ui';
 import ColumnPicker from '@/components/mes/column-picker.vue';
 import { useAuth } from '@/hooks/business/auth';
+import { useDictOptions, useReasonOptions } from '@/hooks/business/dict';
 import { downloadCsv, keepColumn, loadPagePref, moveKey, orderedKeys, rangeColumns, savePagePref } from '@/hooks/business/list-kit';
 import { $t } from '@/locales';
 import { changeEquipmentState, fetchEquipmentDetail, fetchEquipmentPage, removeEquipment, saveEquipment } from '@/service/api/equipment';
@@ -57,10 +58,14 @@ const stateForm = reactive({ toState: 'standby', reasonCode: 'OTHER', reason: ''
 
 const states = ['standby', 'engineering', 'scheduled_down', 'unscheduled_down', 'non_scheduled', 'productive'];
 const reasons = ['ENG_SETUP', 'ENG_DONE', 'PM_START', 'PM_DONE', 'BREAKDOWN', 'REPAIR_DONE', 'NO_WIP', 'SHIFT_END', 'SHIFT_START', 'OTHER'];
+const { options: reasonOptions } = useReasonOptions('eqp', () => reasons.map(value => ({ label: value, value })));
+const { labelOf: eqpStateLabel } = useDictOptions('eqp_state', () =>
+  states.map(value => ({ label: $t(`page.mes.eqp.state_${value}` as App.I18n.I18nKey), value }))
+);
 
 function stateLabel(value: string) {
   if (!value) return '';
-  return $t(`page.mes.eqp.state_${value}` as App.I18n.I18nKey);
+  return eqpStateLabel(value);
 }
 
 const operations = ref<Array<{ id: number; operationCode: string; operationName: string }>>([]);
@@ -87,7 +92,6 @@ async function loadRefs() {
 }
 
 const stateOptions = computed(() => states.map(value => ({ label: stateLabel(value), value })));
-const reasonOptions = computed(() => reasons.map(value => ({ label: value, value })));
 const rules = computed<FormRules>(() => ({
   equipmentCode: { required: true, message: $t('form.required'), trigger: 'blur' },
   equipmentName: { required: true, message: $t('form.required'), trigger: 'blur' }
