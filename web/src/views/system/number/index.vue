@@ -61,9 +61,9 @@ const allColumns = computed<DataTableColumns<Record<string, any>>>(() => [
   { title: $t('page.mes.number.prefix'), key: 'prefix', width: 100 },
   { title: $t('page.mes.number.datePart'), key: 'datePart', width: 120 },
   { title: $t('page.mes.number.seqLength'), key: 'seqLength', width: 100 },
-  { title: $t('page.mes.number.reset'), key: 'resetPeriod', width: 120 },
+  { title: $t('page.mes.number.reset'), key: 'resetPeriod', width: 120, render: row => resetOptions.value.find(item => item.value === row.resetPeriod)?.label || row.resetPeriod },
   { title: $t('page.mes.number.separator'), key: 'separator', width: 80 },
-  { title: $t('page.mes.field.status'), key: 'status', width: 90 },
+  { title: $t('page.mes.field.status'), key: 'status', width: 90, render: row => (Number(row.status) === 1 ? $t('page.mes.enabled') : $t('page.mes.disabled')) },
   {
     title: $t('common.action'),
     key: 'actions',

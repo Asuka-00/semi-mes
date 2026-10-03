@@ -422,7 +422,8 @@ const local: App.I18n.Schema = {
         labelEn: 'English label',
         color: 'Color',
         tag: 'Tag',
-        sort: 'Sort'
+        sort: 'Sort',
+        items: 'Dictionary items'
       },
       reason: {
         category: 'Category',

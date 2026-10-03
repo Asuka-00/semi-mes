@@ -26,6 +26,7 @@ const children: MesChildren = {
   parentKey: 'typeID',
   parentColumn: 'type_id',
   sequenceKey: 'sortOrder',
+  title: 'page.mes.dict.items',
   fields: childFields
 };
 </script>

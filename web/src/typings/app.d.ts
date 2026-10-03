@@ -633,6 +633,7 @@ declare namespace App {
             color: string;
             tag: string;
             sort: string;
+            items: string;
           };
           reason: {
             category: string;

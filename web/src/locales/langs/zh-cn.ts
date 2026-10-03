@@ -418,7 +418,8 @@ const local: App.I18n.Schema = {
         labelEn: '英文名称',
         color: '颜色',
         tag: '标签',
-        sort: '排序'
+        sort: '排序',
+        items: '字典条目'
       },
       reason: {
         category: '类别',
