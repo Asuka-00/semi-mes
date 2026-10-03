@@ -11,11 +11,11 @@ export interface TraceReport {
   wafers: Array<Record<string, any>>;
 }
 
-export function fetchLotTrace(lotNo: string) {
+export function fetchLotTrace(lotNo: string, waferNo = '') {
   return request<TraceReport>({
     url: '/wipLot/trace',
     method: 'post',
-    data: { lotNo }
+    data: { lotNo, waferNo }
   });
 }
 

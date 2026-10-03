@@ -385,6 +385,15 @@ export const generatedRoutes: GeneratedRoute[] = [
     },
     children: [
       {
+        name: 'wip_carrier',
+        path: '/wip/carrier',
+        component: 'view.wip_carrier',
+        meta: {
+          title: 'wip_carrier',
+          i18nKey: 'route.wip_carrier'
+        }
+      },
+      {
         name: 'wip_move',
         path: '/wip/move',
         component: 'view.wip_move',

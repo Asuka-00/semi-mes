@@ -20,6 +20,7 @@ type TrackInInput struct {
 	EquipmentID uint64
 	RecipeID    uint64
 	OperatorID  uint64
+	CarrierNo   string
 }
 
 // TrackOutInput closes the open Track In and moves the lot.
@@ -68,6 +69,7 @@ type StationView struct {
 	LatestResult       string               `json:"latestResult"`
 	OpenMove           *model.WipMove       `json:"openMove"`
 	Equipment          []model.EqpEquipment `json:"equipment"`
+	CarrierNo          string               `json:"carrierNo"`
 }
 
 // StatusCount is one bucket on the WIP overview.
@@ -149,6 +151,7 @@ func GetStation(db *gorm.DB, lotNo string) (*StationView, error) {
 		return nil, err
 	}
 	view.OpenMove = open
+	view.CarrierNo = boundCarrierNo(db, lot.ID)
 	return view, nil
 }
 
@@ -183,6 +186,9 @@ func TrackIn(db *gorm.DB, in TrackInInput) (*model.WipLot, *model.WipMove, error
 		if err := TrackInGate(tx, eqp, node, recipeID); err != nil {
 			return err
 		}
+		if err := validateBoundCarrier(tx, row.ID, in.CarrierNo); err != nil {
+			return err
+		}
 		now := time.Now()
 		queue := 0
 		if row.ArrivedAt != nil {
@@ -207,6 +213,9 @@ func TrackIn(db *gorm.DB, in TrackInInput) (*model.WipLot, *model.WipMove, error
 			LotID: row.ID, EventType: model.EventTrackIn, FromNodeKey: node.Key, ToNodeKey: node.Key,
 			Quantity: row.Quantity, RelatedLotID: eqp.ID,
 		}).Error; err != nil {
+			return err
+		}
+		if err := noteActiveWafers(tx, row.ID, move.ID, model.EventTrackIn, node.Key); err != nil {
 			return err
 		}
 		if err := occupyEquipment(tx, eqp, in.OperatorID); err != nil {
@@ -250,6 +259,9 @@ func AbortTrackIn(db *gorm.DB, lotID, operatorID uint64, reason string) (*model.
 		}).Error; err != nil {
 			return err
 		}
+		if err := noteActiveWafers(tx, row.ID, move.ID, model.EventAbort, row.CurrentNodeKey); err != nil {
+			return err
+		}
 		if err := releaseEquipment(tx, move.EquipmentID, operatorID); err != nil {
 			return err
 		}
@@ -280,6 +292,17 @@ func TrackOut(db *gorm.DB, in TrackOutInput) (*model.WipLot, routegraph.Result, 
 		}
 		if in.QtyScrap > 0 && !AcceptCode(tx, "scrap", in.ScrapReasonCode, ScrapReasons) {
 			return ErrWipQty
+		}
+		if err := scrapWaferCount(tx, row.ID, in.QtyScrap, in.ScrapReasonCode, move.ID); err != nil {
+			return err
+		}
+		if in.QtyOut == 0 {
+			if err := releaseLotCarrier(tx, row.ID); err != nil {
+				return err
+			}
+		}
+		if err := noteActiveWafers(tx, row.ID, move.ID, model.EventTrackOut, row.CurrentNodeKey); err != nil {
+			return err
 		}
 		graph, err := LoadRouteGraph(tx, row.RouteVersionID)
 		if err != nil {

@@ -1,6 +1,7 @@
 package dao
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -12,7 +13,8 @@ import (
 )
 
 func TestAllocateIsUniqueUnderConcurrency(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file:number-test?mode=memory&cache=shared"), &gorm.Config{})
+	dsn := fmt.Sprintf("file:number-race-%d?mode=memory&cache=shared", time.Now().UnixNano())
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -20,7 +22,7 @@ func TestAllocateIsUniqueUnderConcurrency(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxOpenConns(8)
 	if err = db.AutoMigrate(&model.SysNumberRule{}, &model.SysNumberSeq{}); err != nil {
 		t.Fatal(err)
 	}

@@ -3,6 +3,7 @@ package database
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/glebarez/sqlite"
@@ -18,7 +19,7 @@ import (
 // InitSqlite opens SQLite with the pure-Go glebarez driver so CGO_ENABLED=0 builds can link.
 func InitSqlite() *sgorm.DB {
 	sqliteCfg := config.Get().Database.Sqlite
-	dbFile := utils.AdaptiveSqlite(sqliteCfg.DBFile)
+	dbFile := sqliteDSN(utils.AdaptiveSqlite(sqliteCfg.DBFile))
 	if dir := filepath.Dir(dbFile); dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			panic("create sqlite directory error: " + err.Error())
@@ -51,4 +52,18 @@ func InitSqlite() *sgorm.DB {
 		sqlDB.SetConnMaxLifetime(time.Duration(sqliteCfg.ConnMaxLifetime) * time.Minute)
 	}
 	return db
+}
+
+// sqliteDSN asks the driver to begin write transactions immediately and to wait
+// on a busy database. Deferred begins deadlock under concurrent sequence allocation.
+func sqliteDSN(file string) string {
+	file = strings.TrimSpace(file)
+	if file == "" {
+		file = "mes.db"
+	}
+	const params = "_txlock=immediate&_pragma=busy_timeout(5000)"
+	if strings.Contains(file, "?") {
+		return file + "&" + params
+	}
+	return file + "?" + params
 }

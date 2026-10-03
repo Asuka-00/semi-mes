@@ -72,6 +72,10 @@ func Seed(db *gorm.DB) error {
 		&model.MesReasonCode{},
 		&model.SysNumberRule{},
 		&model.SysNumberSeq{},
+		&model.WipCarrier{},
+		&model.WipCarrierBind{},
+		&model.WipWafer{},
+		&model.WipWaferHistory{},
 	); err != nil {
 		return err
 	}
@@ -663,6 +667,45 @@ func seedQuality(db *gorm.DB, productID uint64) error {
 			return err
 		}
 	}
+	return ensureDemoCarrier(db)
+}
+
+func ensureDemoCarrier(db *gorm.DB) error {
+	var existing int64
+	if err := db.Model(&model.WipCarrier{}).Where("carrier_no = ?", "FOUP-DEMO").Count(&existing).Error; err != nil {
+		return err
+	}
+	if existing > 0 {
+		return nil
+	}
+	var lot model.WipLot
+	if err := db.Where("lot_no = ?", "DEMO-WIP-001").First(&lot).Error; err != nil {
+		return nil
+	}
+	now := time.Now()
+	carrier := model.WipCarrier{
+		CarrierNo: "FOUP-DEMO", CarrierType: "FOUP", Capacity: 25, Status: model.CarrierInUse,
+		Location: "PHOTO-BAY", CleanCount: 3, CleanLimit: 50, Note: "演示载具",
+	}
+	if err := db.Create(&carrier).Error; err != nil {
+		return err
+	}
+	if err := db.Create(&model.WipCarrierBind{CarrierID: carrier.ID, LotID: lot.ID, Status: model.BindBound, CreatedAt: &now}).Error; err != nil {
+		return err
+	}
+	for i := 1; i <= lot.Quantity; i++ {
+		wafer := model.WipWafer{
+			WaferNo: fmt.Sprintf("DEMO-W-%03d", i), LotID: lot.ID, CarrierID: carrier.ID, Slot: i, Status: model.WaferActive, CreatedAt: &now,
+		}
+		if err := db.Create(&wafer).Error; err != nil {
+			return err
+		}
+		if err := db.Create(&model.WipWaferHistory{
+			WaferID: wafer.ID, LotID: lot.ID, EventType: model.EventStart, ToSlot: i, CarrierID: carrier.ID, CreatedAt: &now,
+		}).Error; err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -841,6 +884,11 @@ func defaultMenus() []model.SysMenu {
 		{410, 400, 2, "route.wip_station", "wip:move:query", "wip_station", "/wip/station", "view.wip_station", "mdi:barcode-scan", 1},
 		{411, 400, 2, "route.wip_overview", "wip:move:query", "wip_overview", "/wip/overview", "view.wip_overview", "mdi:view-dashboard", 2},
 		{413, 401, 3, "route.wip_move", "wip:move:track", "", "", "", "", 1},
+		{35, 400, 2, "route.wip_carrier", "wip:carrier", "wip_carrier", "/wip/carrier", "view.wip_carrier", "mdi:tray-full", 4},
+		{36, 35, 3, "route.wip_carrier", "wip:carrier:query", "", "", "", "", 1},
+		{37, 35, 3, "route.wip_carrier", "wip:carrier:add", "", "", "", "", 2},
+		{38, 35, 3, "route.wip_carrier", "wip:carrier:edit", "", "", "", "", 3},
+		{39, 35, 3, "route.wip_carrier", "wip:carrier:delete", "", "", "", "", 4},
 		{500, 0, 1, "route.equipment", "equipment", "equipment", "/equipment", "layout.base", "mdi:wrench", 7},
 		{501, 500, 2, "route.equipment_list", "eqp:equipment:query", "equipment_list", "/equipment/list", "view.equipment_list", "mdi:format-list-bulleted", 1},
 		{502, 500, 2, "route.equipment_detail", "eqp:equipment:query", "equipment_detail", "/equipment/detail/:id", "view.equipment_detail", "mdi:information-outline", 2},

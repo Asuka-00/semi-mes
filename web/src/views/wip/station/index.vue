@@ -18,6 +18,7 @@ const inspection = ref('pass');
 const readings = ref<Record<string, number[]>>({});
 const defectCode = ref('');
 const abortReason = ref('');
+const carrierNo = ref('');
 const resultText = ref('');
 
 const { options: scrapOptions } = useReasonOptions('scrap', () => [
@@ -44,6 +45,7 @@ async function load() {
   }
   station.value = data;
   equipmentId.value = data.equipment[0]?.id ?? null;
+  carrierNo.value = data.carrierNo || '';
   readings.value = {};
   (data.inspectPlan?.items || []).forEach(item => {
     readings.value[item.paramCode] = Array.from({ length: item.sampleSize || 1 }, () => item.target ?? 0);
@@ -56,7 +58,7 @@ async function load() {
 
 async function doTrackIn() {
   if (!station.value || !equipmentId.value) return;
-  const { error } = await trackIn(Number(station.value.lot.id), equipmentId.value);
+  const { error } = await trackIn(Number(station.value.lot.id), equipmentId.value, carrierNo.value);
   if (error) return;
   window.$message?.success($t('page.mes.track.trackIn'));
   lotNo.value = station.value.lot.lotNo;
@@ -119,6 +121,7 @@ async function doPass() {
       <div v-if="canTrack && station.lot.status === 'waiting' && station.nodeType === 'operation'" class="mb-12px">
         <NSpace>
           <NSelect v-model:value="equipmentId" :options="equipmentOptions" class="w-280px" :placeholder="$t('page.mes.track.equipment')" />
+          <NInput v-model:value="carrierNo" class="w-180px" :placeholder="$t('page.mes.carrier.no')" />
           <NButton type="primary" :disabled="!equipmentId" @click="doTrackIn">{{ $t('page.mes.track.trackIn') }}</NButton>
         </NSpace>
         <div v-if="!equipmentOptions.length" class="mt-8px">{{ $t('page.mes.track.notAllowed') }}</div>

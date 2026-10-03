@@ -108,6 +108,8 @@ func ensureCatalog(db *gorm.DB) error {
 	rules := []model.SysNumberRule{
 		{RuleCode: model.RuleWorkOrder, RuleName: "工单号", Prefix: "WO", DatePart: "yyyyMMdd", SeqLength: 3, ResetPeriod: "daily", Separator: "-", Status: 1},
 		{RuleCode: model.RuleLot, RuleName: "批次号", Prefix: "LOT", DatePart: "yyyyMMdd", SeqLength: 4, ResetPeriod: "daily", Separator: "-", Status: 1},
+		{RuleCode: model.RuleCarrier, RuleName: "载具号", Prefix: "CAR", DatePart: "yyyyMMdd", SeqLength: 3, ResetPeriod: "daily", Separator: "-", Status: 1},
+		{RuleCode: model.RuleWafer, RuleName: "晶圆号", Prefix: "W", DatePart: "none", SeqLength: 6, ResetPeriod: "never", Separator: "-", Status: 1},
 	}
 	for _, row := range rules {
 		var count int64
