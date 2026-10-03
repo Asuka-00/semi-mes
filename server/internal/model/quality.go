@@ -102,6 +102,7 @@ type QcDefect struct {
 	DefectCode  string         `gorm:"column:defect_code;type:varchar(50);not null;index" json:"defectCode"`
 	Quantity    int            `gorm:"column:quantity" json:"quantity"`
 	Disposition string         `gorm:"column:disposition;type:varchar(20);not null" json:"disposition"`
+	ReasonCode  string         `gorm:"column:reason_code;type:varchar(50)" json:"reasonCode"`
 	Note        string         `gorm:"column:note;type:varchar(255)" json:"note"`
 	OperatorID  uint64         `gorm:"column:operator_id" json:"operatorID"`
 	CreatedAt   *time.Time     `gorm:"column:created_at" json:"createdAt"`

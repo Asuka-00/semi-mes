@@ -707,7 +707,7 @@ onMounted(async () => {
       />
     </NCard>
 
-    <NCard v-if="children" :bordered="false" class="card-wrapper" :title="$t('page.mes.operations')">
+    <NCard v-if="children" :bordered="false" class="card-wrapper" :title="$t(children.title || 'page.mes.operations')">
       <template #header-extra>
         <NButton v-if="canChildAdd && selectedId" type="primary" size="small" @click="openChildCreate">
           {{ $t('common.add') }}

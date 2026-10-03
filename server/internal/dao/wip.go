@@ -3,7 +3,6 @@ package dao
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -130,6 +129,13 @@ func ListReleasedRoutes(db *gorm.DB) ([]ReleasedRoute, error) {
 
 // CreateWorkOrder inserts a created order bound to a released route version of the same product.
 func CreateWorkOrder(db *gorm.DB, in WorkOrderInput) (*model.WipWorkOrder, error) {
+	if strings.TrimSpace(in.OrderNo) == "" {
+		number, err := Allocate(db, model.RuleWorkOrder, time.Now())
+		if err != nil {
+			return nil, err
+		}
+		in.OrderNo = number
+	}
 	if err := validateOrderInput(db, in, 0); err != nil {
 		return nil, err
 	}
@@ -254,10 +260,14 @@ func StartLot(db *gorm.DB, orderID uint64, qty int, lotType string) (*model.WipL
 		if start == "" {
 			return ErrWipVersion
 		}
-		order.NextLotSeq++
 		now := time.Now()
+		lotNo, err := Allocate(tx, model.RuleLot, now)
+		if err != nil {
+			return err
+		}
+		order.NextLotSeq++
 		lot := &model.WipLot{
-			LotNo: fmt.Sprintf("%s-%03d", order.OrderNo, order.NextLotSeq), OrderID: order.ID,
+			LotNo: lotNo, OrderID: order.ID,
 			ProductID: order.ProductID, RouteVersionID: order.RouteVersionID, CurrentNodeKey: start,
 			Quantity: qty, Priority: order.Priority, LotType: lotType, Status: model.LotWaiting, ReworkJSON: "{}",
 			ArrivedAt: &now,
@@ -340,7 +350,7 @@ func LotLinks(db *gorm.DB, lotID uint64) ([]LotLinkView, error) {
 
 // HoldLot freezes a waiting lot.
 func HoldLot(db *gorm.DB, id uint64, reasonCode, reason string) (*model.WipLot, error) {
-	if strings.TrimSpace(reasonCode) == "" {
+	if !AcceptCode(db, "hold", reasonCode, nil) {
 		return nil, ErrWipState
 	}
 	var updated *model.WipLot
@@ -384,6 +394,9 @@ func ReleaseHoldLot(db *gorm.DB, id uint64, reasonCode, reason string) (*model.W
 			return err
 		}
 		if lot.Status != model.LotHold {
+			return ErrWipState
+		}
+		if strings.TrimSpace(reasonCode) != "" && !AcceptCode(tx, "release", reasonCode, nil) {
 			return ErrWipState
 		}
 		if err := tx.Model(lot).Updates(map[string]any{
@@ -441,9 +454,13 @@ func SplitLot(db *gorm.DB, id uint64, quantities []int) (*model.WipLot, []model.
 			return err
 		}
 		for _, q := range quantities {
+			childNo, err := Allocate(tx, model.RuleLot, time.Now())
+			if err != nil {
+				return err
+			}
 			order.NextLotSeq++
 			child := model.WipLot{
-				LotNo: fmt.Sprintf("%s-%03d", order.OrderNo, order.NextLotSeq), OrderID: lot.OrderID,
+				LotNo: childNo, OrderID: lot.OrderID,
 				ProductID: lot.ProductID, RouteVersionID: lot.RouteVersionID, CurrentNodeKey: lot.CurrentNodeKey,
 				Quantity: q, Priority: lot.Priority, LotType: lot.LotType, Status: model.LotWaiting, ReworkJSON: lot.ReworkJSON,
 			}

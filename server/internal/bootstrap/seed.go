@@ -67,6 +67,11 @@ func Seed(db *gorm.DB) error {
 		&model.SysNotification{},
 		&model.SysUserPref{},
 		&model.SysAuditLog{},
+		&model.SysDictType{},
+		&model.SysDictItem{},
+		&model.MesReasonCode{},
+		&model.SysNumberRule{},
+		&model.SysNumberSeq{},
 	); err != nil {
 		return err
 	}
@@ -77,6 +82,9 @@ func Seed(db *gorm.DB) error {
 	}
 	if count > 0 {
 		if err := ensureMenus(db); err != nil {
+			return err
+		}
+		if err := ensureCatalog(db); err != nil {
 			return err
 		}
 		return seedSampleRoute(db)
@@ -126,6 +134,9 @@ func Seed(db *gorm.DB) error {
 		}
 	}
 	if err = db.Create(&roleMenus).Error; err != nil {
+		return err
+	}
+	if err = ensureCatalog(db); err != nil {
 		return err
 	}
 	return seedSampleRoute(db)
@@ -758,6 +769,21 @@ func defaultMenus() []model.SysMenu {
 		{17, 13, 3, "route.system_menu", "system:menu:delete", "", "", "", "", 4},
 		{18, 2, 2, "route.system_audit", "system:audit", "system_audit", "/system/audit", "view.system_audit", "mdi:clipboard-text-clock", 4},
 		{19, 18, 3, "route.system_audit", "system:audit:query", "", "", "", "", 1},
+		{20, 2, 2, "route.system_dict", "system:dict", "system_dict", "/system/dict", "view.system_dict", "mdi:book-alphabet", 5},
+		{21, 20, 3, "route.system_dict", "system:dict:query", "", "", "", "", 1},
+		{22, 20, 3, "route.system_dict", "system:dict:add", "", "", "", "", 2},
+		{23, 20, 3, "route.system_dict", "system:dict:edit", "", "", "", "", 3},
+		{24, 20, 3, "route.system_dict", "system:dict:delete", "", "", "", "", 4},
+		{25, 2, 2, "route.system_reason", "system:reason", "system_reason", "/system/reason", "view.system_reason", "mdi:format-list-checks", 6},
+		{26, 25, 3, "route.system_reason", "system:reason:query", "", "", "", "", 1},
+		{27, 25, 3, "route.system_reason", "system:reason:add", "", "", "", "", 2},
+		{28, 25, 3, "route.system_reason", "system:reason:edit", "", "", "", "", 3},
+		{29, 25, 3, "route.system_reason", "system:reason:delete", "", "", "", "", 4},
+		{30, 2, 2, "route.system_number", "system:number", "system_number", "/system/number", "view.system_number", "mdi:counter", 7},
+		{31, 30, 3, "route.system_number", "system:number:query", "", "", "", "", 1},
+		{32, 30, 3, "route.system_number", "system:number:add", "", "", "", "", 2},
+		{33, 30, 3, "route.system_number", "system:number:edit", "", "", "", "", 3},
+		{34, 30, 3, "route.system_number", "system:number:delete", "", "", "", "", 4},
 
 		{100, 0, 1, "route.base-data", "baseData", "base-data", "/base-data", "layout.base", "mdi:database", 3},
 		{101, 100, 2, "route.base-data_factory", "base:factory", "base-data_factory", "/base-data/factory", "view.base-data_factory", "mdi:factory", 1},

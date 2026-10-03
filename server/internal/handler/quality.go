@@ -58,6 +58,7 @@ type defectBody struct {
 	DefectCode  string `json:"defectCode"`
 	Quantity    int    `json:"quantity"`
 	Disposition string `json:"disposition"`
+	ReasonCode  string `json:"reasonCode"`
 	Note        string `json:"note"`
 }
 
@@ -247,7 +248,7 @@ func RecordDefect(c *gin.Context) {
 	op, _ := currentUserID(c)
 	row, err := dao.RecordDefect(database.GetDB(), dao.DefectInput{
 		LotID: body.LotID, EquipmentID: body.EquipmentID, OperationID: body.OperationID, NodeKey: body.NodeKey,
-		DefectCode: body.DefectCode, Quantity: body.Quantity, Disposition: body.Disposition, Note: body.Note, OperatorID: op,
+		DefectCode: body.DefectCode, Quantity: body.Quantity, Disposition: body.Disposition, ReasonCode: body.ReasonCode, Note: body.Note, OperatorID: op,
 	})
 	if err != nil {
 		writeWipErr(c, err)

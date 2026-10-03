@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import type { DataTableColumns, DataTableRowKey } from 'naive-ui';
 import { useAuth } from '@/hooks/business/auth';
+import { useDictOptions, useReasonOptions } from '@/hooks/business/dict';
 import { downloadCsv, loadPagePref, savePagePref } from '@/hooks/business/list-kit';
 import { $t } from '@/locales';
 import { mesBatch } from '@/service/api/mes';
@@ -25,15 +26,25 @@ const form = reactive({
   defectCode: 'PARTICLE',
   quantity: 1,
   disposition: 'use_as_is',
+  reasonCode: '',
   note: ''
 });
 
-const dispositions = computed(() => [
+const { options: dispositions } = useDictOptions('disposition', () => [
   { label: $t('page.mes.qc.useAsIs'), value: 'use_as_is' },
   { label: $t('page.mes.qc.rework'), value: 'rework' },
   { label: $t('page.mes.qc.scrap'), value: 'scrap' },
   { label: $t('page.mes.qc.hold'), value: 'hold' }
 ]);
+const { options: reworkReasons } = useReasonOptions('rework', () => [{ label: 'REWORK', value: 'REWORK' }]);
+const { options: scrapReasons } = useReasonOptions('scrap', () => [{ label: 'PARTICLE', value: 'PARTICLE' }]);
+const { options: holdReasons } = useReasonOptions('hold', () => [{ label: 'QUALITY', value: 'QUALITY' }]);
+const reasonOptions = computed(() => {
+  if (form.disposition === 'rework') return reworkReasons.value;
+  if (form.disposition === 'scrap') return scrapReasons.value;
+  if (form.disposition === 'hold') return holdReasons.value;
+  return [];
+});
 
 function codeFilters() {
   const columns = [];
@@ -112,6 +123,7 @@ const defectColumns = computed<DataTableColumns<Record<string, any>>>(() => [
   { title: $t('page.mes.qc.code'), key: 'defectCode' },
   { title: $t('page.mes.track.qty'), key: 'quantity' },
   { title: $t('page.mes.qc.disposition'), key: 'disposition' },
+  { title: $t('page.mes.wip.reasonCode'), key: 'reasonCode' },
   { title: $t('page.mes.wip.reason'), key: 'note' }
 ]);
 
@@ -152,6 +164,9 @@ onMounted(async () => {
       <NFormItem :label="$t('page.mes.track.qty')"><NInputNumber v-model:value="form.quantity" :min="1" /></NFormItem>
       <NFormItem :label="$t('page.mes.qc.disposition')">
         <NSelect v-model:value="form.disposition" class="w-160px" :options="dispositions" />
+      </NFormItem>
+      <NFormItem v-if="reasonOptions.length" :label="$t('page.mes.wip.reasonCode')">
+        <NSelect v-model:value="form.reasonCode" class="w-180px" :options="reasonOptions" />
       </NFormItem>
       <NFormItem :label="$t('page.mes.wip.reason')"><NInput v-model:value="form.note" /></NFormItem>
       <NButton type="primary" @click="submit">{{ $t('common.confirm') }}</NButton>

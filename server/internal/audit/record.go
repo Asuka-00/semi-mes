@@ -283,6 +283,14 @@ func resourceMeta(name string) (string, string) {
 		return "system", "sys_role"
 	case "sysMenu":
 		return "system", "sys_menu"
+	case "sysDictType":
+		return "system", "sys_dict_type"
+	case "sysDictItem":
+		return "system", "sys_dict_item"
+	case "sysReasonCode":
+		return "system", "mes_reason_code"
+	case "sysNumberRule":
+		return "system", "sys_number_rule"
 	default:
 		return name, ""
 	}
@@ -448,7 +456,7 @@ func entityCode(before, after string) string {
 		if json.Unmarshal([]byte(raw), &row) != nil {
 			continue
 		}
-		for _, key := range []string{"lot_no", "order_no", "factory_code", "equipment_code", "username", "product_code", "defect_code", "role_code", "recipe_code", "workshop_code", "line_code", "plan_name", "task_no"} {
+		for _, key := range []string{"lot_no", "order_no", "factory_code", "equipment_code", "username", "product_code", "defect_code", "role_code", "recipe_code", "workshop_code", "line_code", "plan_name", "task_no", "type_code", "item_code", "reason_code", "rule_code"} {
 			if text, ok := row[key].(string); ok && text != "" {
 				return text
 			}

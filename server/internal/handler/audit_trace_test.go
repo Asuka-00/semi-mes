@@ -70,8 +70,9 @@ func TestAuditAndTrace(t *testing.T) {
 	if started["code"] != float64(0) {
 		t.Fatalf("start: %+v", started)
 	}
+	parentNo := started["data"].(map[string]any)["lotNo"].(string)
 	lotID := toID(started["data"].(map[string]any)["id"])
-	_, held := doJSON(http.MethodPost, "/api/v1/wipLot/"+lotID+"/hold", token, map[string]any{"reasonCode": "AUDIT_HOLD", "reason": "audit"})
+	_, held := doJSON(http.MethodPost, "/api/v1/wipLot/"+lotID+"/hold", token, map[string]any{"reasonCode": "ENG_HOLD", "reason": "audit"})
 	if held["code"] != float64(0) {
 		t.Fatalf("hold: %+v", held)
 	}
@@ -102,7 +103,7 @@ func TestAuditAndTrace(t *testing.T) {
 	children := split["data"].(map[string]any)["children"].([]any)
 	childNo := children[0].(map[string]any)["lotNo"].(string)
 
-	_, trace := doJSON(http.MethodPost, "/api/v1/wipLot/trace", token, map[string]any{"lotNo": "AUDIT-WO-001"})
+	_, trace := doJSON(http.MethodPost, "/api/v1/wipLot/trace", token, map[string]any{"lotNo": parentNo})
 	if trace["code"] != float64(0) {
 		t.Fatalf("trace: %+v", trace)
 	}
@@ -112,7 +113,7 @@ func TestAuditAndTrace(t *testing.T) {
 	}
 	_, back := doJSON(http.MethodGet, "/api/v1/wipLot/"+toID(children[0].(map[string]any)["id"])+"/trace", token, nil)
 	backward := back["data"].(map[string]any)["backward"].([]any)
-	if len(backward) == 0 || backward[0].(map[string]any)["lotNo"] != "AUDIT-WO-001" {
+	if len(backward) == 0 || backward[0].(map[string]any)["lotNo"] != parentNo {
 		t.Fatalf("backward genealogy: %+v", back["data"])
 	}
 	history := trace["data"].(map[string]any)["history"].([]any)

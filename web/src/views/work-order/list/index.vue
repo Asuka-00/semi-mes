@@ -5,6 +5,7 @@ import type { DataTableColumns, DataTableRowKey, FormInst, FormRules } from 'nai
 import { NButton, NPopconfirm, NSpace, NTag } from 'naive-ui';
 import ColumnPicker from '@/components/mes/column-picker.vue';
 import { useAuth } from '@/hooks/business/auth';
+import { previewNumber, useDictOptions } from '@/hooks/business/dict';
 import { downloadCsv, keepColumn, loadPagePref, moveKey, orderedKeys, rangeColumns, savePagePref } from '@/hooks/business/list-kit';
 import { $t } from '@/locales';
 import { mesBatch } from '@/service/api/mes';
@@ -60,7 +61,7 @@ const startQty = ref(1);
 const startType = ref('production');
 
 const rules = computed<FormRules>(() => ({
-  orderNo: { required: true, message: $t('form.required'), trigger: 'blur' },
+  orderNo: { required: false, trigger: 'blur' },
   routeVersionID: { required: true, type: 'number', message: $t('page.mes.wip.selectVersion'), trigger: 'change' },
   plannedQty: { required: true, type: 'number', message: $t('form.required'), trigger: 'blur' }
 }));
@@ -79,9 +80,16 @@ const priorityOptions = computed(() => [
   { label: $t('page.mes.wip.priorityUrgent'), value: 4 }
 ]);
 
-const lotTypeOptions = computed(() => [
+const { options: lotTypeOptions } = useDictOptions('lot_type', () => [
   { label: $t('page.mes.wip.production'), value: 'production' },
   { label: $t('page.mes.wip.engineering'), value: 'engineering' }
+]);
+const { labelOf: orderStatusLabel } = useDictOptions('order_status', () => [
+  { label: $t('page.mes.wip.created'), value: 'created' },
+  { label: $t('page.mes.wip.released'), value: 'released' },
+  { label: $t('page.mes.wip.inProgress'), value: 'in_progress' },
+  { label: $t('page.mes.wip.completed'), value: 'completed' },
+  { label: $t('page.mes.wip.closed'), value: 'closed' }
 ]);
 
 function statusLabel(status: string) {
@@ -92,7 +100,12 @@ function statusLabel(status: string) {
     completed: 'page.mes.wip.completed',
     closed: 'page.mes.wip.closed'
   };
-  return $t((map[status] || 'page.mes.wip.status') as App.I18n.I18nKey);
+  return orderStatusLabel(status) || $t((map[status] || 'page.mes.wip.status') as App.I18n.I18nKey);
+}
+
+async function fillOrderNo() {
+  const { data, error } = await previewNumber('work_order');
+  if (!error && data?.preview) form.orderNo = data.preview;
 }
 
 function priorityLabel(value: number) {
@@ -384,7 +397,10 @@ onMounted(async () => {
     <NModal v-model:show="modal" preset="card" :title="editingId ? $t('common.edit') : $t('common.add')" class="w-560px">
       <NForm ref="formRef" :model="form" :rules="rules" label-placement="left" label-width="120">
         <NFormItem :label="$t('page.mes.wip.orderNo')" path="orderNo">
-          <NInput v-model:value="form.orderNo" />
+          <NInputGroup>
+            <NInput v-model:value="form.orderNo" :placeholder="$t('page.mes.number.auto')" />
+            <NButton v-if="hasAuth('system:number:query')" @click="fillOrderNo">{{ $t('page.mes.number.preview') }}</NButton>
+          </NInputGroup>
         </NFormItem>
         <NFormItem :label="$t('page.mes.wip.routeVersion')" path="routeVersionID">
           <NSelect

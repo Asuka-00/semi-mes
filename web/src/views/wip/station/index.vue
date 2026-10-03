@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useAuth } from '@/hooks/business/auth';
+import { useReasonOptions } from '@/hooks/business/dict';
 import { $t } from '@/locales';
 import { abortTrack, fetchStation, passNode, trackIn, trackOut } from '@/service/api/track';
 import type { StationView } from '@/service/api/track';
@@ -19,7 +20,7 @@ const defectCode = ref('');
 const abortReason = ref('');
 const resultText = ref('');
 
-const scrapOptions = computed(() => [
+const { options: scrapOptions } = useReasonOptions('scrap', () => [
   { label: $t('page.mes.track.reasonParticle'), value: 'PARTICLE' },
   { label: $t('page.mes.track.reasonBroken'), value: 'BROKEN' },
   { label: $t('page.mes.track.reasonScratch'), value: 'SCRATCH' },

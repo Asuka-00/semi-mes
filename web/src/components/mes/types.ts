@@ -30,6 +30,7 @@ export interface MesChildren {
   parentKey: string;
   parentColumn: string;
   sequenceKey: string;
+  title?: App.I18n.I18nKey;
   fields: MesField[];
 }
 

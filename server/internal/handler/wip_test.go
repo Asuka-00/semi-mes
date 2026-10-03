@@ -2,8 +2,14 @@ package handler_test
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 )
+
+func fmtLot(value any) string {
+	text, _ := value.(string)
+	return text
+}
 
 func TestWorkOrderAndLot(t *testing.T) {
 	token := login(t, "admin", "admin123")
@@ -44,13 +50,14 @@ func TestWorkOrderAndLot(t *testing.T) {
 		t.Fatalf("start: %+v", started)
 	}
 	lotData := started["data"].(map[string]any)
-	if lotData["lotNo"] != "WO-CMOS-001" || lotData["currentNodeKey"] != "start" {
+	if !strings.HasPrefix(fmtLot(lotData["lotNo"]), "LOT-") || lotData["currentNodeKey"] != "start" {
 		t.Fatalf("lot identity: %+v", lotData)
 	}
 	lotID := toID(lotData["id"])
 
 	_, eng := doJSON(http.MethodPost, "/api/v1/wipWorkOrder/"+orderID+"/start", token, map[string]any{"quantity": 6, "lotType": "engineering"})
-	if eng["code"] != float64(0) || eng["data"].(map[string]any)["lotNo"] != "WO-CMOS-002" {
+	engNo := fmtLot(eng["data"].(map[string]any)["lotNo"])
+	if eng["code"] != float64(0) || !strings.HasPrefix(engNo, "LOT-") || engNo == fmtLot(lotData["lotNo"]) {
 		t.Fatalf("engineering lot: %+v", eng)
 	}
 	engID := toID(eng["data"].(map[string]any)["id"])

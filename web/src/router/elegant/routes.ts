@@ -320,12 +320,39 @@ export const generatedRoutes: GeneratedRoute[] = [
         }
       },
       {
+        name: 'system_dict',
+        path: '/system/dict',
+        component: 'view.system_dict',
+        meta: {
+          title: 'system_dict',
+          i18nKey: 'route.system_dict'
+        }
+      },
+      {
         name: 'system_menu',
         path: '/system/menu',
         component: 'view.system_menu',
         meta: {
           title: 'system_menu',
           i18nKey: 'route.system_menu'
+        }
+      },
+      {
+        name: 'system_number',
+        path: '/system/number',
+        component: 'view.system_number',
+        meta: {
+          title: 'system_number',
+          i18nKey: 'route.system_number'
+        }
+      },
+      {
+        name: 'system_reason',
+        path: '/system/reason',
+        component: 'view.system_reason',
+        meta: {
+          title: 'system_reason',
+          i18nKey: 'route.system_reason'
         }
       },
       {

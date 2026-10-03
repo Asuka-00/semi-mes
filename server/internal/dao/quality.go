@@ -70,6 +70,7 @@ type DefectInput struct {
 	DefectCode  string
 	Quantity    int
 	Disposition string
+	ReasonCode  string
 	Note        string
 	OperatorID  uint64
 }
@@ -752,6 +753,20 @@ func RecordDefect(db *gorm.DB, in DefectInput) (*model.QcDefect, error) {
 	default:
 		return nil, ErrQc
 	}
+	if strings.TrimSpace(in.ReasonCode) != "" {
+		category := ""
+		switch in.Disposition {
+		case model.DispositionRework:
+			category = "rework"
+		case model.DispositionScrap:
+			category = "scrap"
+		case model.DispositionHold:
+			category = "hold"
+		}
+		if category != "" && !AcceptCode(db, category, in.ReasonCode, nil) {
+			return nil, ErrQc
+		}
+	}
 	var saved *model.QcDefect
 	err := db.Transaction(func(tx *gorm.DB) error {
 		var code model.QcDefectCode
@@ -774,7 +789,7 @@ func RecordDefect(db *gorm.DB, in DefectInput) (*model.QcDefect, error) {
 		}
 		row := &model.QcDefect{
 			LotID: lot.ID, NodeKey: node, OperationID: in.OperationID, EquipmentID: in.EquipmentID, DefectCode: in.DefectCode,
-			Quantity: in.Quantity, Disposition: in.Disposition, Note: in.Note, OperatorID: in.OperatorID,
+			Quantity: in.Quantity, Disposition: in.Disposition, ReasonCode: in.ReasonCode, Note: in.Note, OperatorID: in.OperatorID,
 		}
 		if err := tx.Create(row).Error; err != nil {
 			return err

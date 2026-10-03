@@ -43,6 +43,10 @@ var resources = []resource{
 	{"/api/v1/sysRole", "system:role"},
 	{"/api/v1/sysMenu", "system:menu"},
 	{"/api/v1/sysAudit", "system:audit"},
+	{"/api/v1/sysDictType", "system:dict"},
+	{"/api/v1/sysDictItem", "system:dict"},
+	{"/api/v1/sysReasonCode", "system:reason"},
+	{"/api/v1/sysNumberRule", "system:number"},
 }
 
 // RequirePermission checks the permission code mapped from method and route.
@@ -89,7 +93,7 @@ func RequirePermission() gin.HandlerFunc {
 func permissionCode(method, fullPath string) string {
 	for _, item := range resources {
 		if fullPath == item.prefix || strings.HasPrefix(fullPath, item.prefix+"/") {
-			if strings.Contains(fullPath, "/trace") {
+			if strings.Contains(fullPath, "/trace") || strings.HasSuffix(fullPath, "/preview") {
 				return item.perm + ":query"
 			}
 			if strings.HasSuffix(fullPath, "/roles") || strings.HasSuffix(fullPath, "/menus") {

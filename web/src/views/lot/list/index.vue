@@ -5,6 +5,7 @@ import type { DataTableColumns, DataTableRowKey } from 'naive-ui';
 import { NButton, NSpace, NTag } from 'naive-ui';
 import ColumnPicker from '@/components/mes/column-picker.vue';
 import { useAuth } from '@/hooks/business/auth';
+import { useDictOptions, useReasonOptions } from '@/hooks/business/dict';
 import { downloadCsv, keepColumn, loadPagePref, moveKey, orderedKeys, rangeColumns, savePagePref } from '@/hooks/business/list-kit';
 import { $t } from '@/locales';
 import { mesBatch } from '@/service/api/mes';
@@ -63,9 +64,15 @@ const dataColumns = computed(() => [
   { key: 'status', label: $t('page.mes.wip.status') }
 ]);
 
-const statusOptions = computed(() =>
+const { options: statusOptions, labelOf: dictStatus } = useDictOptions('lot_status', () =>
   ['waiting', 'running', 'hold', 'scrapped', 'completed', 'merged'].map(value => ({ label: statusLabel(value), value }))
 );
+const { labelOf: lotTypeLabel } = useDictOptions('lot_type', () => [
+  { label: $t('page.mes.wip.production'), value: 'production' },
+  { label: $t('page.mes.wip.engineering'), value: 'engineering' }
+]);
+const { options: holdReasons } = useReasonOptions('hold', () => [{ label: 'ENG_HOLD', value: 'ENG_HOLD' }, { label: 'QA', value: 'QA' }]);
+const { options: releaseReasons } = useReasonOptions('release', () => [{ label: 'RELEASE', value: 'RELEASE' }]);
 
 const columns = computed<DataTableColumns<LotRow>>(() => {
   const visible = new Set(orderedKeys(dataColumns.value.map(item => item.key), columnOrder.value).filter(key => !hidden.value.includes(key)));
@@ -78,14 +85,14 @@ const columns = computed<DataTableColumns<LotRow>>(() => {
     title: $t('page.mes.wip.lotType'),
     key: 'lotType',
     width: 100,
-    render: row => (row.lotType === 'engineering' ? $t('page.mes.wip.engineering') : $t('page.mes.wip.production'))
+    render: row => lotTypeLabel(row.lotType)
   },
   { title: $t('page.mes.wip.currentNode'), key: 'nodeName', minWidth: 140, render: row => row.nodeName || row.currentNodeKey },
   {
     title: $t('page.mes.wip.status'),
     key: 'status',
     width: 110,
-    render: row => h(NTag, { size: 'small', type: row.status === 'hold' ? 'warning' : 'default' }, { default: () => statusLabel(row.status) })
+    render: row => h(NTag, { size: 'small', type: row.status === 'hold' ? 'warning' : 'default' }, { default: () => dictStatus(row.status) })
   },
   {
     title: $t('common.action'),
@@ -300,7 +307,7 @@ onMounted(async () => {
     <NModal v-model:show="holdOpen" preset="card" :title="holdRelease ? $t('page.mes.wip.releaseHold') : $t('page.mes.wip.holdAction')" class="w-460px">
       <NForm label-placement="left" label-width="100">
         <NFormItem :label="$t('page.mes.wip.reasonCode')">
-          <NInput v-model:value="reasonCode" />
+          <NSelect v-model:value="reasonCode" :options="holdRelease ? releaseReasons : holdReasons" />
         </NFormItem>
         <NFormItem :label="$t('page.mes.wip.reason')">
           <NInput v-model:value="reason" type="textarea" />
