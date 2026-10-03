@@ -40,6 +40,7 @@ declare module "@elegant-router/types" {
     "lot": "/lot";
     "lot_detail": "/lot/detail/:id";
     "lot_list": "/lot/list";
+    "lot_trace": "/lot/trace";
     "quality": "/quality";
     "quality_defect": "/quality/defect";
     "quality_inspection": "/quality/inspection";
@@ -47,6 +48,7 @@ declare module "@elegant-router/types" {
     "quality_plan": "/quality/plan";
     "quality_spc": "/quality/spc";
     "system": "/system";
+    "system_audit": "/system/audit";
     "system_menu": "/system/menu";
     "system_role": "/system/role";
     "system_user": "/system/user";
@@ -136,11 +138,13 @@ declare module "@elegant-router/types" {
     | "home"
     | "lot_detail"
     | "lot_list"
+    | "lot_trace"
     | "quality_defect"
     | "quality_inspection"
     | "quality_pareto"
     | "quality_plan"
     | "quality_spc"
+    | "system_audit"
     | "system_menu"
     | "system_role"
     | "system_user"

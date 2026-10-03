@@ -66,6 +66,7 @@ func Seed(db *gorm.DB) error {
 		&model.QcSpcEvent{},
 		&model.SysNotification{},
 		&model.SysUserPref{},
+		&model.SysAuditLog{},
 	); err != nil {
 		return err
 	}
@@ -755,6 +756,8 @@ func defaultMenus() []model.SysMenu {
 		{15, 13, 3, "route.system_menu", "system:menu:add", "", "", "", "", 2},
 		{16, 13, 3, "route.system_menu", "system:menu:edit", "", "", "", "", 3},
 		{17, 13, 3, "route.system_menu", "system:menu:delete", "", "", "", "", 4},
+		{18, 2, 2, "route.system_audit", "system:audit", "system_audit", "/system/audit", "view.system_audit", "mdi:clipboard-text-clock", 4},
+		{19, 18, 3, "route.system_audit", "system:audit:query", "", "", "", "", 1},
 
 		{100, 0, 1, "route.base-data", "baseData", "base-data", "/base-data", "layout.base", "mdi:database", 3},
 		{101, 100, 2, "route.base-data_factory", "base:factory", "base-data_factory", "/base-data/factory", "view.base-data_factory", "mdi:factory", 1},
@@ -805,6 +808,8 @@ func defaultMenus() []model.SysMenu {
 		{303, 301, 3, "route.lot_list", "lot:lot:query", "", "", "", "", 1},
 		{304, 301, 3, "route.lot_list", "lot:lot:add", "", "", "", "", 2},
 		{305, 301, 3, "route.lot_list", "lot:lot:edit", "", "", "", "", 3},
+		{306, 300, 2, "route.lot_trace", "lot:lot:query", "lot_trace", "/lot/trace", "view.lot_trace", "mdi:family-tree", 3},
+		{307, 306, 3, "route.lot_trace", "lot:lot:query", "", "", "", "", 1},
 		{400, 0, 1, "route.wip", "wip", "wip", "/wip", "layout.base", "mdi:transit-connection-variant", 6},
 		{401, 400, 2, "route.wip_move", "wip:move:query", "wip_move", "/wip/move", "view.wip_move", "mdi:transfer", 3},
 		{410, 400, 2, "route.wip_station", "wip:move:query", "wip_station", "/wip/station", "view.wip_station", "mdi:barcode-scan", 1},

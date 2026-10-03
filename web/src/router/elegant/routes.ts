@@ -233,6 +233,15 @@ export const generatedRoutes: GeneratedRoute[] = [
           title: 'lot_list',
           i18nKey: 'route.lot_list'
         }
+      },
+      {
+        name: 'lot_trace',
+        path: '/lot/trace',
+        component: 'view.lot_trace',
+        meta: {
+          title: 'lot_trace',
+          i18nKey: 'route.lot_trace'
+        }
       }
     ]
   },
@@ -301,6 +310,15 @@ export const generatedRoutes: GeneratedRoute[] = [
       i18nKey: 'route.system'
     },
     children: [
+      {
+        name: 'system_audit',
+        path: '/system/audit',
+        component: 'view.system_audit',
+        meta: {
+          title: 'system_audit',
+          i18nKey: 'route.system_audit'
+        }
+      },
       {
         name: 'system_menu',
         path: '/system/menu',

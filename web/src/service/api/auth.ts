@@ -18,6 +18,10 @@ export function fetchLogin(userName: string, password: string) {
 }
 
 /** Get user info */
+export function fetchLogout() {
+  return request({ url: '/auth/logout', method: 'post', data: {} });
+}
+
 export function fetchGetUserInfo() {
   return request<Api.Auth.UserInfo>({ url: '/auth/getUserInfo' });
 }

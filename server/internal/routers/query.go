@@ -12,5 +12,6 @@ func init() {
 		pref.GET("/:page", handler.GetPref)
 		pref.PUT("/:page", handler.SavePref)
 		group.POST("/batch", handler.Batch)
+		group.POST("/sysAudit/list", handler.ListAuditLogs)
 	})
 }

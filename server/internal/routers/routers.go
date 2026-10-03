@@ -18,6 +18,7 @@ import (
 	"github.com/go-dev-frame/sponge/pkg/logger"
 
 	"semi-mes/server/docs"
+	"semi-mes/server/internal/audit"
 	"semi-mes/server/internal/config"
 	"semi-mes/server/internal/handler"
 	"semi-mes/server/internal/rbac"
@@ -108,6 +109,8 @@ func NewRouter() *gin.Engine {
 		r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	}
 
+	r.Use(audit.Middleware())
+
 	authH := handler.NewAuthHandler()
 	r.POST("/api/v1/auth/login", authH.Login)
 	r.POST("/api/v1/auth/refreshToken", authH.RefreshToken)
@@ -119,6 +122,7 @@ func NewRouter() *gin.Engine {
 	}
 	registerRouters(r, "/api/v1", apiV1RouterFns, protected...)
 	authGroup := r.Group("/api/v1", protected...)
+	authGroup.POST("/auth/logout", authH.Logout)
 	authGroup.GET("/auth/getUserInfo", authH.UserInfo)
 	authGroup.GET("/route/getUserRoutes", authH.UserRoutes)
 	authGroup.GET("/route/isRouteExist", authH.RouteExist)

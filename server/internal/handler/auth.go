@@ -18,6 +18,7 @@ import (
 
 type AuthHandler interface {
 	Login(c *gin.Context)
+	Logout(c *gin.Context)
 	RefreshToken(c *gin.Context)
 	UserInfo(c *gin.Context)
 	UserRoutes(c *gin.Context)
@@ -84,6 +85,10 @@ func (h *authHandler) Login(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"token": token, "refreshToken": refresh})
+}
+
+func (h *authHandler) Logout(c *gin.Context) {
+	response.Success(c, gin.H{})
 }
 
 func (h *authHandler) RefreshToken(c *gin.Context) {
